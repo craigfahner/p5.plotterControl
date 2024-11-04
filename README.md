@@ -1,5 +1,8 @@
-# simple-socket
+# p5-plotter-control
 
-A server that serves a webpage, and establishes a socket connection to send data back and forth. This can be used as a template to build socket.io based apps on Glitch.
+to do:
+- create GPlotter class
+- set up DOM elements for return to zero etc
+- - serial config as part of this
+- fix pen lifting "bug" on continuous shapes
 
-## Made by [Craig Fahner](https://www.craigfahner.com)
