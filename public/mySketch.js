@@ -1,7 +1,14 @@
 const socket = io();  //use this to initialize the socket that we will use to talk to the server
 
+let ready = true;
+let gQueue = [];
+
+let freeLineStarted = false;
+
 let testGCode; // temp array to store gcode for tio testing
 let gCodeIndex = -1;
+
+let gCodeToOutput;
 
 let pageWidth = 594; // paper width in mm
 let pageHeight = 841; // paper height in mm
@@ -15,6 +22,7 @@ let drawCircleMode = false;
 let drawRectangleMode = false;
 let drawArcMode = false;
 let drawLineMode = false;
+let freeDrawMode = false;
 
 // Variables to store start position for shapes
 let circleStartX, circleStartY;
@@ -40,6 +48,7 @@ function setup() {
     noFill();
     background(225);
     textSize(16);
+    frameRate(20);
 }
 
 function draw() {
@@ -81,25 +90,37 @@ function draw() {
             lineEndX = mouseX;
             lineEndY = mouseY;
             line(lineStartX, lineStartY, lineEndX, lineEndY);
+        } else if (freeDrawMode){
+            if(freeLineStarted){
+                line(pmouseX,pmouseY,mouseX,mouseY);
+                drawnShapes.push({ type: 'line', x1: pmouseX, y1: pmouseY, x2: mouseX, y2: mouseY });
+                gLine(pmouseX, pmouseY, mouseX, mouseY);
+            }
         }
     }
 }
 
 function mousePressed() {
-    if (drawCircleMode) {
-        circleStartX = mouseX;
-        circleStartY = mouseY;
-    } else if (drawRectangleMode) {
-        rectStartX = mouseX;
-        rectStartY = mouseY;
-    } else if (drawArcMode) {
-        arcStartX = mouseX;
-        arcStartY = mouseY;
-    } else if (drawLineMode) {
-        lineStartX = mouseX;
-        lineStartY = mouseY;
+    if(mouseX>0&&mouseX<width&&mouseY>0&&mouseY<height){
+
+   
+        if (drawCircleMode) {
+            circleStartX = mouseX;
+            circleStartY = mouseY;
+        } else if (drawRectangleMode) {
+            rectStartX = mouseX;
+            rectStartY = mouseY;
+        } else if (drawArcMode) {
+            arcStartX = mouseX;
+            arcStartY = mouseY;
+        } else if (drawLineMode) {
+            lineStartX = mouseX;
+            lineStartY = mouseY;
+        } else if (freeDrawMode){
+            freeLineStarted = true;
+        }
+        isDragging = true;
     }
-    isDragging = true;
 }
 
 function mouseReleased() {
@@ -127,6 +148,8 @@ function mouseReleased() {
         let y2 = lineEndY;
         drawnShapes.push({ type: 'line', x1: x1, y1: y1, x2: x2, y2: y2 });
         gLine(x1, y1, x2, y2);
+    } else if (freeDrawMode){
+        freeLineStarted = false;
     }
 }
 
@@ -141,13 +164,12 @@ function keyPressed() {
         setDrawingMode('Circle');
     } else if (key === 'q' || key === 'Q') {
         quitDrawingMode();
-    } else if (key === 'm'){
-        gCodeIndex++;
-        socket.emit("gCodeOutput", testGCode);
     } else if (key === 'z'){
         socket.emit("gCodeOutput", 'G92 X0Y0Z0\n');
     } else if (key === 'x'){
         socket.emit("gCodeOutput", 'G01 Z0\nG28\n');
+    } else if (key === 'f'){
+        setDrawingMode('Free');
     }
 
 }
@@ -157,6 +179,7 @@ function setDrawingMode(mode) {
     drawRectangleMode = mode === 'Rectangle';
     drawArcMode = mode === 'Arc';
     drawLineMode = mode === 'Line';
+    freeDrawMode = mode === 'Free';
     currentMode = mode;
 }
 
@@ -191,8 +214,8 @@ function circleToGCode(x, y, d) {
         gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${feedRate} ; Draw circle segment`);
     }
     gcode.push(`G00 Z0 F${feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
-    console.log(gcode.join("\n"));
-    socket.emit("gCodeOutput", gcode.join("\n"));
+    gQueue = gQueue.concat(gcode);
+    socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
 }
 
 function gLine(x1, y1, x2, y2) {
@@ -205,17 +228,19 @@ function gLine(x1, y1, x2, y2) {
 }
 
 function lineToGCode(x1, y1, x2, y2) {
-    let gcode = [
-        "G90 ; Absolute positioning",
-        `G00 X${x1.toFixed(3)} Y${y1.toFixed(3)} F${feedRate} ; Move to start of line`,
-        `G01 Z${cuttingDepth} F${feedRate} ; Lower tool for cutting`,
-        `G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${feedRate} ; Draw line to endpoint`,
-        `G00 Z0 F${feedRate} ; Lift tool after cutting`,
-        "M30 ; Program end and reset"
-    ];
-    console.log(gcode.join("\n"));
-    socket.emit("gCodeOutput", gcode.join("\n"));
-
+    //if(x1 != x2 && y1 != y2){
+        let gcode = [
+            "G90 ; Absolute positioning",
+            `G00 X${x1.toFixed(3)} Y${y1.toFixed(3)} F${feedRate} ; Move to start of line`,
+            `G01 Z${cuttingDepth} F${feedRate} ; Lower tool for cutting`,
+            `G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${feedRate} ; Draw line to endpoint`,
+            `G00 Z0 F${feedRate} ; Lift tool after cutting`,
+            "M30 ; Program end and reset"
+        ];
+        console.log(gcode.join("\n"));
+        gQueue = gQueue.concat(gcode);
+        socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
+    //}
 }
 
 function gRectangle(x, y, w, h) {
@@ -240,7 +265,8 @@ function rectangleToGCode(x, y, w, h) {
         "M30 ; Program end and reset"
     ];
     console.log(gcode.join("\n"));
-    socket.emit("gCodeOutput", gcode.join("\n"));
+    gQueue = gQueue.concat(gcode);
+    socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
 }
 
 function gArc(x, y, w, h, start, stop) {
@@ -273,7 +299,26 @@ function arcToGCode(x, y, w, h, start, stop) {
         gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${feedRate} ; Draw arc segment`);
     }
     gcode.push(`G00 Z0 F${feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
-    console.log(gcode.join("\n"));
-    socket.emit("gCodeOutput", gcode.join("\n"));
-
+    //console.log(gcode.join("\n"));
+    //socket.emit("gCodeOutput", gcode.join("\n"));
+    gQueue = gQueue.concat(gcode);
+    socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
 }
+
+// function outputGCode(gCode){
+
+// }
+
+socket.on('plotter', (message) => {
+    console.log(message);
+
+    if(message.trim().includes('k')){ // sometimes the message comes broken like on\k, so this catches those errors
+        console.log('message ok received');
+        if(gQueue.length>0){
+            console.log('sending ' + gQueue[0]);
+            socket.emit("gCodeOutput", gQueue[0]+'\n');
+            gQueue.splice(0,1);
+            console.log(gQueue);
+        }
+    }
+});

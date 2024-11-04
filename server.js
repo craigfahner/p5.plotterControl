@@ -36,6 +36,7 @@ const tioProcess = pty.spawn('tio', ['/dev/cu.usbmodem201912341'], {
 
 tioProcess.on('data', (data) => {
   console.log(`Received data from tio: ${data}`);
+  io.emit('plotter',data.toString());
 });
 
 server.listen(port, () => {                              //set up server to listen on specified port
@@ -46,6 +47,7 @@ app.use(express.static("public"));                       // make all the files i
 
 io.on('connection', (socket) => {  
   console.log('user connected');                      // when a client has connected...
+  tioProcess.write('G92 X0Y0Z0\n');
   socket.on('gCodeOutput', (data) => {    
       // Write the command to tio's stdin
       tioProcess.write(data);
