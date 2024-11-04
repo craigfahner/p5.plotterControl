@@ -42,4 +42,7 @@ io.on('connection', (socket) => {
       // Write the command to tio's stdin
       serialPort.write(data);
   });
+  socket.on('disconnect', (reason) => {  
+    serialPort.write('G01 Z0\nG28\n');
+  });
 });
