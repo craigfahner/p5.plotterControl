@@ -154,8 +154,6 @@ class GPlotter {
             gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${this.feedRate} ; Draw arc segment`);
         }
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
-        //console.log(gcode.join("\n"));
-        //socket.emit("gCodeOutput", gcode.join("\n"));
         this.queue = this.queue.concat(gcode);
         if (this.enabled) {
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
