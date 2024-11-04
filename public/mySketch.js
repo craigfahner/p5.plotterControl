@@ -40,6 +40,8 @@ let isDragging = false; // Variable to track if mouse is being dragged
 let drawnShapes = []; // Array to store drawn shapes
 let currentMode = ""; // Variable to store current mode
 
+let gCodeInstance;
+
 function setup() {
     let ratio = pageWidth / pageHeight;
     let canvasHeight = screenWidth / ratio;
@@ -49,6 +51,8 @@ function setup() {
     background(225);
     textSize(16);
     frameRate(20);
+
+    //gCodeInstance = new GCode();
 }
 
 function draw() {
@@ -90,9 +94,9 @@ function draw() {
             lineEndX = mouseX;
             lineEndY = mouseY;
             line(lineStartX, lineStartY, lineEndX, lineEndY);
-        } else if (freeDrawMode){
-            if(freeLineStarted){
-                line(pmouseX,pmouseY,mouseX,mouseY);
+        } else if (freeDrawMode) {
+            if (freeLineStarted) {
+                line(pmouseX, pmouseY, mouseX, mouseY);
                 drawnShapes.push({ type: 'line', x1: pmouseX, y1: pmouseY, x2: mouseX, y2: mouseY });
                 gLine(pmouseX, pmouseY, mouseX, mouseY);
             }
@@ -101,9 +105,9 @@ function draw() {
 }
 
 function mousePressed() {
-    if(mouseX>0&&mouseX<width&&mouseY>0&&mouseY<height){
+    if (mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
 
-   
+
         if (drawCircleMode) {
             circleStartX = mouseX;
             circleStartY = mouseY;
@@ -116,7 +120,7 @@ function mousePressed() {
         } else if (drawLineMode) {
             lineStartX = mouseX;
             lineStartY = mouseY;
-        } else if (freeDrawMode){
+        } else if (freeDrawMode) {
             freeLineStarted = true;
         }
         isDragging = true;
@@ -124,32 +128,35 @@ function mousePressed() {
 }
 
 function mouseReleased() {
-    isDragging = false;
-    if (drawCircleMode) {
-        let d = circleDiameter;
-        drawnShapes.push({ type: 'circle', x: circleStartX, y: circleStartY, diameter: d });
-        gCircle(circleStartX, circleStartY, d);
-    } else if (drawRectangleMode) {
-        let w = rectWidth;
-        let h = rectHeight;
-        drawnShapes.push({ type: 'rectangle', x: rectStartX, y: rectStartY, width: w, height: h });
-        gRectangle(rectStartX, rectStartY, w, h);
-    } else if (drawArcMode) {
-        let w = arcWidth;
-        let h = arcHeight;
-        let startAngle = mouseY < arcStartY ? PI : 0;
-        let stopAngle = mouseY < arcStartY ? TWO_PI : PI;
-        drawnShapes.push({ type: 'arc', x: arcStartX, y: arcStartY, width: w, height: h, start: startAngle, stop: stopAngle });
-        gArc(arcStartX, arcStartY, w, h, startAngle, stopAngle);
-    } else if (drawLineMode) {
-        let x1 = lineStartX;
-        let y1 = lineStartY;
-        let x2 = lineEndX;
-        let y2 = lineEndY;
-        drawnShapes.push({ type: 'line', x1: x1, y1: y1, x2: x2, y2: y2 });
-        gLine(x1, y1, x2, y2);
-    } else if (freeDrawMode){
-        freeLineStarted = false;
+    if (mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
+
+        isDragging = false;
+        if (drawCircleMode) {
+            let d = circleDiameter;
+            drawnShapes.push({ type: 'circle', x: circleStartX, y: circleStartY, diameter: d });
+            gCircle(circleStartX, circleStartY, d);
+        } else if (drawRectangleMode) {
+            let w = rectWidth;
+            let h = rectHeight;
+            drawnShapes.push({ type: 'rectangle', x: rectStartX, y: rectStartY, width: w, height: h });
+            gRectangle(rectStartX, rectStartY, w, h);
+        } else if (drawArcMode) {
+            let w = arcWidth;
+            let h = arcHeight;
+            let startAngle = mouseY < arcStartY ? PI : 0;
+            let stopAngle = mouseY < arcStartY ? TWO_PI : PI;
+            drawnShapes.push({ type: 'arc', x: arcStartX, y: arcStartY, width: w, height: h, start: startAngle, stop: stopAngle });
+            gArc(arcStartX, arcStartY, w, h, startAngle, stopAngle);
+        } else if (drawLineMode) {
+            let x1 = lineStartX;
+            let y1 = lineStartY;
+            let x2 = lineEndX;
+            let y2 = lineEndY;
+            drawnShapes.push({ type: 'line', x1: x1, y1: y1, x2: x2, y2: y2 });
+            gLine(x1, y1, x2, y2);
+        } else if (freeDrawMode) {
+            freeLineStarted = false;
+        }
     }
 }
 
@@ -164,11 +171,11 @@ function keyPressed() {
         setDrawingMode('Circle');
     } else if (key === 'q' || key === 'Q') {
         quitDrawingMode();
-    } else if (key === 'z'){
+    } else if (key === 'z') {
         socket.emit("gCodeOutput", 'G92 X0Y0Z0\n');
-    } else if (key === 'x'){
+    } else if (key === 'x') {
         socket.emit("gCodeOutput", 'G01 Z0\nG28\n');
-    } else if (key === 'f'){
+    } else if (key === 'f') {
         setDrawingMode('Free');
     }
 
@@ -229,17 +236,17 @@ function gLine(x1, y1, x2, y2) {
 
 function lineToGCode(x1, y1, x2, y2) {
     //if(x1 != x2 && y1 != y2){
-        let gcode = [
-            "G90 ; Absolute positioning",
-            `G00 X${x1.toFixed(3)} Y${y1.toFixed(3)} F${feedRate} ; Move to start of line`,
-            `G01 Z${cuttingDepth} F${feedRate} ; Lower tool for cutting`,
-            `G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${feedRate} ; Draw line to endpoint`,
-            `G00 Z0 F${feedRate} ; Lift tool after cutting`,
-            "M30 ; Program end and reset"
-        ];
-        console.log(gcode.join("\n"));
-        gQueue = gQueue.concat(gcode);
-        socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
+    let gcode = [
+        "G90 ; Absolute positioning",
+        `G00 X${x1.toFixed(3)} Y${y1.toFixed(3)} F${feedRate} ; Move to start of line`,
+        `G01 Z${cuttingDepth} F${feedRate} ; Lower tool for cutting`,
+        `G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${feedRate} ; Draw line to endpoint`,
+        `G00 Z0 F${feedRate} ; Lift tool after cutting`,
+        "M30 ; Program end and reset"
+    ];
+    console.log(gcode.join("\n"));
+    gQueue = gQueue.concat(gcode);
+    socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
     //}
 }
 
@@ -312,12 +319,12 @@ function arcToGCode(x, y, w, h, start, stop) {
 socket.on('plotter', (message) => {
     console.log(message);
 
-    if(message.trim().includes('k')){ // sometimes the message comes broken like on\k, so this catches those errors
+    if (message.trim().includes('k')) { // sometimes the message comes broken like on\k, so this catches those errors
         console.log('message ok received');
-        if(gQueue.length>0){
+        if (gQueue.length > 0) {
             console.log('sending ' + gQueue[0]);
-            socket.emit("gCodeOutput", gQueue[0]+'\n');
-            gQueue.splice(0,1);
+            socket.emit("gCodeOutput", gQueue[0] + '\n');
+            gQueue.splice(0, 1);
             console.log(gQueue);
         }
     }
