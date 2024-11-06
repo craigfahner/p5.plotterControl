@@ -1,22 +1,10 @@
-
 let plotter;
 
-// perlin experiment stuff - can be cleared
-let perlinMode = false; // turn on to try
-let intervalId;
-let noiseX;
-let noiseY;
-let noiseD;
-let noiseSpeed = 0.01;
 
 function setup() {
     plotter = new GPlotter(594, 841, 500); // page w in mm, page h in mm, screen display width
     createCanvas(plotter.screenWidth, plotter.canvasHeight);
     frameRate(30);
-
-    noiseX = random(1000);
-    noiseY = random(1000);
-    noiseD = random(1000);
 }
 
 function draw() {
@@ -54,28 +42,5 @@ function keyPressed() {
         let randomStart = random(2 * PI);
         let randomStop = random(2 * PI);
         plotter.arc(randomX, randomY, randomWidth, randomHeight, randomStart, randomStop);
-    }
-}
-
-// perlin experiment stuff down below here
-
-function drawPerlin() {
-    console.log("This runs once every second");
-    let x = map(noise(noiseX), 0, 1, 50, width - 50);
-    let y = map(noise(noiseY), 0, 1, 50, height - 50);
-    let d = map(noise(noiseD), 0, 1, 0, 50);
-    plotter.circle(x, y, d);
-    noiseX += noiseSpeed;
-    noiseY += noiseSpeed;
-    noiseD += noiseSpeed;
-}
-
-function mousePressed() {
-    if (perlinMode) {
-        if (!intervalId) {
-            intervalId = setInterval(drawPerlin, 1000);
-        } else {
-            clearInterval(intervalId);
-        }
     }
 }

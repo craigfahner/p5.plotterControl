@@ -1,10 +1,10 @@
 class GPlotter {
-    constructor(pageWidth, pageHeight, screenWidth) {
+    constructor(pageWidth, pageHeight, screenWidth, enabled) {
         this.queue = []; // array to store gcode instructions
         this.feedRate = 3000;
         this.cuttingDepth = 6.25;
         this.drawnShapes = []; // array to store shapes drawn to canvas
-        this.enabled = true; // option to not send gcode values via 
+        this.enabled = enabled; // option to not send gcode values via 
         this.pageWidth = pageWidth;
         this.pageHeight = pageHeight;
         this.screenWidth = screenWidth;
@@ -38,6 +38,27 @@ class GPlotter {
                 arc(shape.x, shape.y, shape.width, shape.height, shape.start, shape.stop);
             } else if (shape.type === 'line') {
                 line(shape.x1, shape.y1, shape.x2, shape.y2);
+            } else if (shape.type === 'customShape') {
+                beginShape();
+                shape.vertices.forEach((v, index) => {
+                    if (v.isCurve) {
+                        // Add extra curveVertex at the start and the end for proper closure
+                        if (index === 0) {
+                            curveVertex(v.x, v.y);
+                        }
+                        curveVertex(v.x, v.y);
+                        if (index === shape.vertices.length - 1) {
+                            curveVertex(v.x, v.y);
+                        }
+                    } else {
+                        vertex(v.x, v.y);
+                    }
+                });
+                if (shape.isClosed) {
+                    endShape(CLOSE);
+                } else {
+                    endShape();
+                }
             }
         });
     }
@@ -158,6 +179,88 @@ class GPlotter {
         if (this.enabled) {
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
         }
+    }
+
+    beginShape() {
+        this.drawnShapes.push({ type: 'customShape', vertices: [] });
+    }
+
+    vertex(x, y) {
+        this.drawnShapes[this.drawnShapes.length - 1].vertices.push({ x: x, y: y, isCurve: false });
+    }
+
+    curveVertex(x, y) {
+        this.drawnShapes[this.drawnShapes.length - 1].vertices.push({ x: x, y: y, isCurve: true });
+    }
+
+    endShape(close = false) {
+        let shape = this.drawnShapes[this.drawnShapes.length - 1];
+        shape.type = 'customShape';
+        shape.isClosed = close === CLOSE; // Set whether the shape should be closed based on `CLOSE`
+        this.generateGCodeForCustomShape(shape.vertices, close === CLOSE);
+    }
+
+    generateGCodeForCustomShape(vertices, close) {
+        let gcode = ["G90 ; Absolute positioning"];
+        if (vertices.length > 0) {
+            // Move to the start of the shape
+            let startX = this.pageWidth - vertices[0].x * this.pixelToMMRatio;
+            let startY = vertices[0].y * this.pixelToMMRatio;
+            gcode.push(`G00 X${startX.toFixed(3)} Y${startY.toFixed(3)} F${this.feedRate} ; Move to start of shape`);
+            gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for cutting`);
+
+            // Iterate through vertices and generate G-code
+            for (let i = 1; i < vertices.length; i++) {
+                if (vertices[i].isCurve && i > 1 && i < vertices.length - 2) {
+                    // Catmull-Rom spline requires 4 points, skip the first vertex
+                    let p0 = vertices[i - 1];
+                    let p1 = vertices[i];
+                    let p2 = vertices[i + 1];
+                    let p3 = vertices[i + 2];
+
+                    let numSegments = 10; // Smoother curve
+                    for (let j = 0; j <= numSegments; j++) {
+                        let t = j / numSegments;
+                        let x = this.catmullRom(t, p0.x, p1.x, p2.x, p3.x);
+                        let y = this.catmullRom(t, p0.y, p1.y, p2.y, p3.y);
+
+                        let mmX = this.pageWidth - x * this.pixelToMMRatio;
+                        let mmY = y * this.pixelToMMRatio;
+                        gcode.push(`G01 X${mmX.toFixed(3)} Y${mmY.toFixed(3)} F${this.feedRate} ; Draw curve segment`);
+                    }
+                } else {
+                    // Draw straight line to next vertex
+                    let x = this.pageWidth - vertices[i].x * this.pixelToMMRatio;
+                    let y = vertices[i].y * this.pixelToMMRatio;
+                    gcode.push(`G01 X${x.toFixed(3)} Y${y.toFixed(3)} F${this.feedRate} ; Draw to vertex`);
+                }
+            }
+
+            // If closing the shape, connect the last point to the first point
+            if (close) {
+                gcode.push(`G01 X${startX.toFixed(3)} Y${startY.toFixed(3)} F${this.feedRate} ; Close the shape`);
+            }
+
+            gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
+            gcode.push("M30 ; Program end and reset");
+        } else {
+            console.log("Not enough vertices to generate a shape");
+        }
+        //console.log(gcode.join("\n"));
+        this.queue = this.queue.concat(gcode);
+        if (this.enabled) {
+            this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
+        }
+    }
+
+    catmullRom(t, p0, p1, p2, p3) {
+        // Catmull-Rom spline formula
+        return 0.5 * (
+            (2 * p1) +
+            (-p0 + p2) * t +
+            (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t +
+            (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t
+        );
     }
 
     onMessage(message) {
