@@ -42,5 +42,15 @@ function keyPressed() {
         let randomStart = random(2 * PI);
         let randomStop = random(2 * PI);
         plotter.arc(randomX, randomY, randomWidth, randomHeight, randomStart, randomStop);
+    } else if (key === 'e') {
+        let randomWidth = random(10, width / 2);
+        let randomHeight = random(10, height / 2);
+        let randomX = Math.floor(random(randomWidth / 2, width - (randomWidth / 2)));
+        let randomY = Math.floor(random(randomHeight / 2, height - (randomHeight / 2)));
+        plotter.ellipse(randomX, randomY, randomWidth, randomHeight);
+    } else if (key === 'p') {
+        let randomX = random(width);
+        let randomY = random(height);
+        plotter.point(randomX, randomY);
     }
 }

@@ -59,6 +59,10 @@ class GPlotter {
                 } else {
                     endShape();
                 }
+            } else if (shape.type === 'ellipse') {
+                ellipse(shape.x, shape.y, shape.width, shape.height);
+            } else if (shape.type === 'point') {
+                point(shape.x, shape.y);
             }
         });
     }
@@ -261,6 +265,60 @@ class GPlotter {
             (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t +
             (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t
         );
+    }
+
+    ellipse(x, y, w, h) {
+        this.drawnShapes.push({ type: 'ellipse', x: ellipseStartX, y: ellipseStartY, width: w, height: h });
+        let mmX = pageWidth - x * pixelToMMRatio;
+        let mmY = y * pixelToMMRatio;
+        let mmW = w * pixelToMMRatio;
+        let mmH = h * pixelToMMRatio;
+        this.ellipseToGCode(mmX, mmY, mmW, mmH);
+    }
+
+    ellipseToGCode(x, y, w, h) {
+        let r_w = w / 2;
+        let r_h = h / 2;
+        let segments = 36;
+        let gcode = ["G90 ; Absolute positioning"];
+        let startX = x + r_w;
+        let startY = y;
+        gcode.push(`G00 X${startX.toFixed(3)} Y${startY.toFixed(3)} F${this.feedRate} ; Move to start of ellipse`);
+        gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for cutting`);
+        let angleIncrement = (2 * Math.PI) / segments;
+        for (let i = 0; i <= segments; i++) {
+            let angle = i * angleIncrement;
+            let xPos = x + r_w * Math.cos(angle);
+            let yPos = y + r_h * Math.sin(angle);
+            gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${this.feedRate} ; Draw ellipse segment`);
+        }
+        gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
+        this.queue = this.queue.concat(gcode);
+        if (this.enabled) {
+            this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
+        }
+    }
+
+    point(x, y) {
+        this.drawnShapes.push({ type: 'point', x: mouseX, y: mouseY });
+        point(x, y);
+        let mmX = pageWidth - x * pixelToMMRatio;
+        let mmY = y * pixelToMMRatio;
+        this.pointToGCode(mmX, mmY);
+    }
+
+    pointToGCode(x, y) {
+        let gcode = [
+            "G90 ; Absolute positioning",
+            `G00 X${x.toFixed(3)} Y${y.toFixed(3)} F${this.feedRate} ; Move to point`,
+            `G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for marking point`,
+            `G00 Z0 F${this.feedRate} ; Lift tool after marking`,
+            "M30 ; Program end and reset"
+        ];
+        this.queue = this.queue.concat(gcode);
+        if (this.enabled) {
+            this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
+        }
     }
 
     onMessage(message) {
