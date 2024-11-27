@@ -4,27 +4,59 @@ class GPlotter {
         this.feedRate = 3000;
         this.cuttingDepth = 6.25;
         this.drawnShapes = []; // array to store shapes drawn to canvas
-        this.enabled = enabled; // option to not send gcode values via 
+        this.enabled = enabled; // option to not send gcode values via socket
         this.pageWidth = pageWidth;
         this.pageHeight = pageHeight;
         this.screenWidth = screenWidth;
         this.canvasHeight = screenWidth / (pageWidth / pageHeight);
         this.pixelToMMRatio = pageWidth / screenWidth;
-        this.socket = io();
-        this.socket.on('plotter', (data) => this.onMessage(data));
+        this.socketConnected = false;
         // Handle connection errors
-        this.socket.on('connect_error', (error) => {
-            console.error('Connection error:', error);
-        });
+        try{
+            this.socket = io();
+            this.socketConnected = true;
+        } catch (error) {
+            console.log(error);
+            this.socketConnected = false;
+            this.enabled = false;
+        }
+        if(this.socketConnected){
+            this.socket.on('plotter', (data) => this.onMessage(data));
+            this.socket.on('connect_error', (error) => {
+                console.error('Connection error:', error);
+            });
+    
+            this.socket.on('connect_timeout', () => {
+                console.error('Connection timed out');
+            });
+    
+            // Optionally handle disconnect events
+            this.socket.on('disconnect', (reason) => {
+                console.warn(`Disconnected from server. Reason: ${reason}`);
+            });
+        }
+        this.enabledCheckbox = createCheckbox("Plotting Enabled", false);   
+        this.enabledCheckbox.position(screenWidth+10,10);
+        this.enabledCheckbox.elt.querySelector('input').id = 'enabled';
+        this.enabledCheckbox.changed(this.toggleEnabled);
+        
 
-        this.socket.on('connect_timeout', () => {
-            console.error('Connection timed out');
-        });
+        this.feedRateSlider = createSlider(0,100);
+        this.feedRateSlider.position(screenWidth+10,30);
+    }
 
-        // Optionally handle disconnect events
-        this.socket.on('disconnect', (reason) => {
-            console.warn(`Disconnected from server. Reason: ${reason}`);
-        });
+    toggleEnabled(){
+        let checkbox = select('#enabled'); 
+        if(checkbox.checked() == true){
+            if(this.socketConnected == true){
+                this.enabled = true;
+            } else {
+                checkbox.checked(false);
+                console.log('socket not connected, cannot enable plotter functions!')
+            } 
+        } else {
+            this.enabled = false;
+        }
     }
 
     display() {

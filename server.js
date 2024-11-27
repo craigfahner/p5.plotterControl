@@ -5,6 +5,7 @@ const app = express();                                   // make a new app
 const server = require('http').Server(app);              // and create an http server for the app
 const io = require('socket.io')(server);                 // then create a socket using that server that clients can connect to
 const port = 3000;   
+const ports = [];
                                    
 
 SerialPort.list()
@@ -12,6 +13,7 @@ SerialPort.list()
     console.log('Available Serial Ports:');
     ports.forEach((portInfo) => {
       console.log(`- Port: ${portInfo.path}, Manufacturer: ${portInfo.manufacturer}`);
+      ports.push(portInfo.path);
     });
   })
   .catch((err) => {
@@ -36,6 +38,7 @@ server.listen(port, () => {                              //set up server to list
 app.use(express.static("public"));                       // make all the files in 'public' available
 
 io.on('connection', (socket) => {  
+  socket.emit("portList", ports);
   console.log('user connected');                      // when a client has connected...
   serialPort.write('G92 X0Y0Z0\n');
   socket.on('gCodeOutput', (data) => {    
