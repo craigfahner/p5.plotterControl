@@ -21,7 +21,7 @@ function keyPressed() {
         let randomDiameter = random(10, width / 2);
         let randomX = Math.floor(random(randomDiameter / 2, width - (randomDiameter / 2)));
         let randomY = Math.floor(random(randomDiameter / 2, height - (randomDiameter / 2)));
-        plotter.circle(randomX, randomY, randomDiameter);
+        plotter.circle(randomX, randomY, randomDiameter, false);
     } else if (key === 'l') {
         let randomX1 = random(width);
         let randomY1 = random(height);
@@ -33,7 +33,7 @@ function keyPressed() {
         let randomH = random(10, height / 2);
         let randomX = random(width - randomW);
         let randomY = random(height - randomH);
-        plotter.rectangle(randomX, randomY, randomW, randomH);
+        plotter.rectangle(randomX, randomY, randomW, randomH, false);
     } else if (key === 'a') {
         let randomWidth = random(10, width / 2);
         let randomHeight = random(10, height / 2);
@@ -47,10 +47,24 @@ function keyPressed() {
         let randomHeight = random(10, height / 2);
         let randomX = Math.floor(random(randomWidth / 2, width - (randomWidth / 2)));
         let randomY = Math.floor(random(randomHeight / 2, height - (randomHeight / 2)));
-        plotter.ellipse(randomX, randomY, randomWidth, randomHeight);
+        plotter.ellipse(randomX, randomY, randomWidth, randomHeight, false);
     } else if (key === 'p') {
         let randomX = random(width);
         let randomY = random(height);
         plotter.point(randomX, randomY);
+    } else if (key === 's') { // Press 's' to draw a spiral
+        let angleStep = 0.2;
+        let radius = 1;
+        let centerX = 200; // Spiral center X
+        let centerY = 200; // Spiral center Y
+
+        plotter.beginShape(); // Start the custom shape
+        for (let angle = 0; angle <= TWO_PI * 6; angle += angleStep) {
+            let x = centerX + radius * cos(angle);
+            let y = centerY + radius * sin(angle);
+            plotter.vertex(x, y); // Add vertices to the shape
+            radius += 0.5; // Increase radius to create spiral effect
+        }
+        plotter.endShape(CLOSE, true); // Close the shape and enable filling
     }
 }

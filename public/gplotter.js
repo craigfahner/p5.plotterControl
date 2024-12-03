@@ -11,6 +11,8 @@ class GPlotter {
         this.canvasHeight = screenWidth / (pageWidth / pageHeight);
         this.pixelToMMRatio = pageWidth / screenWidth;
         this.socketConnected = false;
+        this.fillGap = 5;
+
         // Handle connection errors
         try{
             this.socket = io();
@@ -64,8 +66,28 @@ class GPlotter {
         this.drawnShapes.forEach(shape => {
             if (shape.type === 'circle') {
                 ellipse(shape.x, shape.y, shape.diameter, shape.diameter);
+                if (shape.fill) {
+                    let radius = shape.diameter / 2;
+                    let fillGap = 5; // Match the `this.fillGap` used in G-code
+                    for (let yy = shape.y - radius; yy <= shape.y + radius; yy += fillGap) {
+                        let innerValue = radius * radius - ((yy - shape.y) * (yy - shape.y));
+                        if (innerValue >= 0) { // Valid horizontal line within the circle
+                            let x1 = shape.x - Math.sqrt(innerValue);
+                            let x2 = shape.x + Math.sqrt(innerValue);
+                            line(x1, yy, x2, yy); // Draw fill line
+                        }
+                    }
+                }
             } else if (shape.type === 'rectangle') {
                 rect(shape.x, shape.y, shape.width, shape.height);
+                if (shape.fill) {
+                    let fillGap = 5; // Match the this.fillGap used in G-code
+                    for (let yy = shape.y; yy <= shape.y + shape.height; yy += fillGap) {
+                        let x1 = shape.x; // Left edge
+                        let x2 = shape.x + shape.width; // Right edge
+                        line(x1, yy, x2, yy); // Draw a horizontal fill line
+                    }
+                }
             } else if (shape.type === 'arc') {
                 arc(shape.x, shape.y, shape.width, shape.height, shape.start, shape.stop);
             } else if (shape.type === 'line') {
@@ -91,23 +113,105 @@ class GPlotter {
                 } else {
                     endShape();
                 }
+                // Simulate the fill
+            if (shape.fill && shape.isClosed) {
+                let minY = Math.min(...shape.vertices.map(v => v.y));
+                let maxY = Math.max(...shape.vertices.map(v => v.y));
+                let fillGap = 5; // Same as the G-code gap
+
+                for (let yy = minY; yy <= maxY; yy += fillGap) {
+                    let intersections = [];
+
+                    // Find intersection points of the horizontal line (yy) with shape edges
+                    for (let i = 0; i < shape.vertices.length; i++) {
+                        let v1 = shape.vertices[i];
+                        let v2 = shape.vertices[(i + 1) % shape.vertices.length]; // Wrap to first vertex
+
+                        if (v1.isCurve && i > 0 && i < shape.vertices.length - 2) {
+                            // Curve segment intersections
+                            let p0 = shape.vertices[i - 1];
+                            let p1 = v1;
+                            let p2 = v2;
+                            let p3 = shape.vertices[i + 2];
+                            let numSegments = 10;
+
+                            for (let j = 0; j < numSegments; j++) {
+                                let t1 = j / numSegments;
+                                let t2 = (j + 1) / numSegments;
+
+                                let x1 = this.catmullRom(t1, p0.x, p1.x, p2.x, p3.x);
+                                let y1 = this.catmullRom(t1, p0.y, p1.y, p2.y, p3.y);
+
+                                let x2 = this.catmullRom(t2, p0.x, p1.x, p2.x, p3.x);
+                                let y2 = this.catmullRom(t2, p0.y, p1.y, p2.y, p3.y);
+
+                                if ((y1 <= yy && y2 > yy) || (y2 <= yy && y1 > yy)) {
+                                    let t = (yy - y1) / (y2 - y1);
+                                    let intersectX = x1 + t * (x2 - x1);
+                                    intersections.push(intersectX);
+                                }
+                            }
+                        } else {
+                            // Straight segment intersections
+                            let y1 = v1.y;
+                            let y2 = v2.y;
+                            let x1 = v1.x;
+                            let x2 = v2.x;
+
+                            if ((y1 <= yy && y2 > yy) || (y2 <= yy && y1 > yy)) {
+                                let t = (yy - y1) / (y2 - y1);
+                                let intersectX = x1 + t * (x2 - x1);
+                                intersections.push(intersectX);
+                            }
+                        }
+                    }
+
+                    // Sort intersections from left to right
+                    intersections.sort((a, b) => a - b);
+
+                    // Draw fill lines between pairs of intersections
+                    for (let i = 0; i < intersections.length; i += 2) {
+                        if (i + 1 < intersections.length) {
+                            let xStart = intersections[i];
+                            let xEnd = intersections[i + 1];
+                            line(xStart, yy, xEnd, yy); // Draw the fill line
+                        }
+                    }
+                }
+            }
             } else if (shape.type === 'ellipse') {
                 ellipse(shape.x, shape.y, shape.width, shape.height);
+                // Simulate the fill if enabled
+            if (shape.fill) {
+                let r_w = shape.width / 2; // Horizontal radius
+                let r_h = shape.height / 2; // Vertical radius
+                let fillGap = 5; // Match the G-code fill gap
+
+                // Generate fill lines
+                for (let yy = shape.y - r_h; yy <= shape.y + r_h; yy += fillGap) {
+                    let xOffset = r_w * Math.sqrt(1 - Math.pow((yy - shape.y) / r_h, 2));
+                    if (!isNaN(xOffset)) { // Ensure valid offset calculation
+                        let x1 = shape.x - xOffset;
+                        let x2 = shape.x + xOffset;
+                        line(x1, yy, x2, yy); // Draw the fill line
+                    }
+                }
+            }
             } else if (shape.type === 'point') {
                 point(shape.x, shape.y);
             }
         });
     }
 
-    circle(x, y, d) {
-        this.drawnShapes.push({ type: 'circle', x: x, y: y, diameter: d });
+    circle(x, y, d, fill=true) {
+        this.drawnShapes.push({ type: 'circle', x: x, y: y, diameter: d, fill:fill });
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
         let mmY = y * this.pixelToMMRatio;
         let mmD = d * this.pixelToMMRatio;
-        this.circleToGCode(mmX, mmY, mmD);
+        this.circleToGCode(mmX, mmY, mmD, fill);
     }
 
-    circleToGCode(x, y, d) {
+    circleToGCode(x, y, d, fill) {
         let radius = d / 2;
         let segments = 36;
         let gcode = [
@@ -120,6 +224,19 @@ class GPlotter {
             let xPos = x + radius * Math.cos(angle);
             let yPos = y + radius * Math.sin(angle);
             gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${this.feedRate} ; Draw circle segment`);
+        }
+        if (fill) {
+            for (let yy = y - radius; yy <= y + radius; yy += this.fillGap) { // Using fill gap
+                let innerValue = radius * radius - ((yy - y) * (yy - y));
+                if (innerValue >= 0) { // Only proceed if the value inside the square root is non-negative
+                    let x1 = x - Math.sqrt(innerValue);
+                    let x2 = x + Math.sqrt(innerValue);
+                    gcode.push(`G00 X${x1.toFixed(3)} Y${yy.toFixed(3)} ; Move to fill start`);
+                    gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for filling`);
+                    gcode.push(`G01 X${x2.toFixed(3)} Y${yy.toFixed(3)} F${this.feedRate} ; Fill line`);
+                    gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after fill line`);
+                }
+            }
         }
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
         this.queue = this.queue.concat(gcode);
@@ -153,16 +270,16 @@ class GPlotter {
         }
     }
 
-    rectangle(x, y, w, h) {
-        this.drawnShapes.push({ type: 'rectangle', x: x, y: y, width: w, height: h });
+    rectangle(x, y, w, h, fill = true) {
+        this.drawnShapes.push({ type: 'rectangle', x: x, y: y, width: w, height: h, fill:fill });
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
         let mmY = y * this.pixelToMMRatio;
         let mmW = w * this.pixelToMMRatio;
         let mmH = h * this.pixelToMMRatio;
-        this.rectangleToGCode(mmX, mmY, mmW, mmH);
+        this.rectangleToGCode(mmX, mmY, mmW, mmH, fill);
     }
 
-    rectangleToGCode(x, y, w, h) {
+    rectangleToGCode(x, y, w, h, fill) {
         let gcode = [
             "G90 ; Absolute positioning",
             `G00 X${x.toFixed(3)} Y${y.toFixed(3)} F${this.feedRate} ; Move to rect start`,
@@ -174,6 +291,16 @@ class GPlotter {
             `G00 Z0 F${this.feedRate} ; Lift tool after cutting`,
             "M30 ; Program end and reset"
         ];
+
+        if (fill) {
+            for (let yy = y; yy <= y + h; yy += this.fillGap) { // Using fill gap
+                gcode.push(`G00 X${(x - w).toFixed(3)} Y${yy.toFixed(3)} ; Move to fill start`);
+                gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for filling`);
+                gcode.push(`G01 X${x.toFixed(3)} Y${yy.toFixed(3)} F${this.feedRate} ; Fill line`);
+                gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after fill line`);
+            }
+        }
+
         console.log(gcode.join("\n"));
         this.queue = this.queue.concat(gcode);
         if (this.enabled) {
@@ -229,14 +356,16 @@ class GPlotter {
         this.drawnShapes[this.drawnShapes.length - 1].vertices.push({ x: x, y: y, isCurve: true });
     }
 
-    endShape(close = false) {
+    endShape(close = false, fill = true) {
         let shape = this.drawnShapes[this.drawnShapes.length - 1];
         shape.type = 'customShape';
         shape.isClosed = close === CLOSE; // Set whether the shape should be closed based on `CLOSE`
-        this.generateGCodeForCustomShape(shape.vertices, close === CLOSE);
+        shape.fill = fill;
+        this.generateGCodeForCustomShape(shape.vertices, close === CLOSE, fill);
+
     }
 
-    generateGCodeForCustomShape(vertices, close) {
+    generateGCodeForCustomShape(vertices, close, fill = true) {
         let gcode = ["G90 ; Absolute positioning"];
         if (vertices.length > 0) {
             // Move to the start of the shape
@@ -278,11 +407,84 @@ class GPlotter {
             }
 
             gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
+            // Generate the G-code for filling the shape if requested
+        if (fill && close) {
+            // Calculate the bounding box of the shape
+            let minY = Math.min(...vertices.map(v => v.y)) * this.pixelToMMRatio;
+            let maxY = Math.max(...vertices.map(v => v.y)) * this.pixelToMMRatio;
+
+            // Traverse from minY to maxY at fillGap intervals
+            for (let yy = minY; yy <= maxY; yy += this.fillGap) {
+                let intersections = [];
+
+                // Find intersection points of the horizontal line (yy) with the shape's edges
+                for (let i = 0; i < vertices.length; i++) {
+                    let v1 = vertices[i];
+                    let v2 = vertices[(i + 1) % vertices.length]; // Wrap to the first vertex for closure
+
+                    if (v1.isCurve && i > 1 && i < vertices.length - 2) {
+                        // Handle curve segments with Catmull-Rom spline
+                        let p0 = vertices[i - 1];
+                        let p1 = vertices[i];
+                        let p2 = vertices[i + 1];
+                        let p3 = vertices[i + 2];
+                        let numSegments = 10;
+
+                        for (let j = 0; j < numSegments; j++) {
+                            let t1 = j / numSegments;
+                            let t2 = (j + 1) / numSegments;
+
+                            let x1 = catmullRom(t1, p0.x, p1.x, p2.x, p3.x);
+                            let y1 = catmullRom(t1, p0.y, p1.y, p2.y, p3.y);
+
+                            let x2 = catmullRom(t2, p0.x, p1.x, p2.x, p3.x);
+                            let y2 = catmullRom(t2, p0.y, p1.y, p2.y, p3.y);
+
+                            if ((y1 <= yy && y2 > yy) || (y2 <= yy && y1 > yy)) {
+                                let t = (yy - y1) / (y2 - y1);
+                                let intersectX = x1 + t * (x2 - x1);
+                                intersections.push(this.pageWidth - intersectX * this.pixelToMMRatio);
+                            }
+                        }
+                    } else {
+                        // Handle straight line segments
+                        let y1 = v1.y * this.pixelToMMRatio;
+                        let y2 = v2.y * this.pixelToMMRatio;
+                        let x1 = this.pageWidth - v1.x * this.pixelToMMRatio;
+                        let x2 = this.pageWidth - v2.x * this.pixelToMMRatio;
+
+                        if ((y1 <= yy && y2 > yy) || (y2 <= yy && y1 > yy)) {
+                            // Calculate the intersection point using linear interpolation
+                            let t = (yy - y1) / (y2 - y1);
+                            let intersectX = x1 + t * (x2 - x1);
+                            intersections.push(intersectX);
+                        }
+                    }
+                }
+
+                // Sort intersections from left to right
+                intersections.sort((a, b) => a - b);
+
+                // Draw fill lines between pairs of intersection points
+                for (let i = 0; i < intersections.length; i += 2) {
+                    if (i + 1 < intersections.length) {
+                        let xStart = intersections[i];
+                        let xEnd = intersections[i + 1];
+                        gcode.push(`G00 X${xStart.toFixed(3)} Y${yy.toFixed(3)} ; Move to fill start`);
+                        gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for filling`);
+                        gcode.push(`G01 X${xEnd.toFixed(3)} Y${yy.toFixed(3)} F${this.feedRate} ; Fill line`);
+                        gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after fill line`);
+                    }
+                }
+            }
+        }
+
             gcode.push("M30 ; Program end and reset");
         } else {
             console.log("Not enough vertices to generate a shape");
         }
         //console.log(gcode.join("\n"));
+        console.log(`Generating shape: Close=${close}, Fill=${fill}`);
         this.queue = this.queue.concat(gcode);
         if (this.enabled) {
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
@@ -299,16 +501,16 @@ class GPlotter {
         );
     }
 
-    ellipse(x, y, w, h) {
-        this.drawnShapes.push({ type: 'ellipse', x: ellipseStartX, y: ellipseStartY, width: w, height: h });
-        let mmX = pageWidth - x * pixelToMMRatio;
-        let mmY = y * pixelToMMRatio;
-        let mmW = w * pixelToMMRatio;
-        let mmH = h * pixelToMMRatio;
-        this.ellipseToGCode(mmX, mmY, mmW, mmH);
+    ellipse(x, y, w, h, fill = true) {
+        this.drawnShapes.push({ type: 'ellipse', x: x, y:y, width: w, height: h, fill: fill});
+        let mmX = this.pageWidth - x * this.pixelToMMRatio;
+        let mmY = y * this.ixelToMMRatio;
+        let mmW = w * this.pixelToMMRatio;
+        let mmH = h * this.pixelToMMRatio;
+        this.ellipseToGCode(mmX, mmY, mmW, mmH, fill);
     }
 
-    ellipseToGCode(x, y, w, h) {
+    ellipseToGCode(x, y, w, h, fill) {
         let r_w = w / 2;
         let r_h = h / 2;
         let segments = 36;
@@ -324,6 +526,20 @@ class GPlotter {
             let yPos = y + r_h * Math.sin(angle);
             gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${this.feedRate} ; Draw ellipse segment`);
         }
+        // Generate fill lines
+        if (fill) {
+            for (let yy = y - r_h; yy <= y + r_h; yy += this.fillGap) { // Using a hatch spacing of 5mm
+                let xOffset = r_w * Math.sqrt(1 - Math.pow((yy - y) / r_h, 2));
+                if (!isNaN(xOffset)) { // Ensure that the value is valid
+                    let x1 = x - xOffset;
+                    let x2 = x + xOffset;
+                    gcode.push(`G00 X${x1.toFixed(3)} Y${yy.toFixed(3)} ; Move to fill start`);
+                    gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for filling`);
+                    gcode.push(`G01 X${x2.toFixed(3)} Y${yy.toFixed(3)} F${this.feedRate} ; Fill line`);
+                    gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after fill line`);
+                }
+            }
+        }
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
         this.queue = this.queue.concat(gcode);
         if (this.enabled) {
@@ -332,10 +548,10 @@ class GPlotter {
     }
 
     point(x, y) {
-        this.drawnShapes.push({ type: 'point', x: mouseX, y: mouseY });
+        this.drawnShapes.push({ type: 'point', x: x, y: y });
         point(x, y);
-        let mmX = pageWidth - x * pixelToMMRatio;
-        let mmY = y * pixelToMMRatio;
+        let mmX = this.pageWidth - x * this.pixelToMMRatio;
+        let mmY = y * this.pixelToMMRatio;
         this.pointToGCode(mmX, mmY);
     }
 
