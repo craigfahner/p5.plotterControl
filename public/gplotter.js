@@ -13,51 +13,242 @@ class GPlotter {
         this.socketConnected = false;
         this.fillGap = 5;
 
+        // Create Enable Checkbox to enable plotting
+        this.enabledCheckbox = createCheckbox("Plotting Enabled", false);
+        this.enabledCheckbox.position(screenWidth + 10, 10);
+        this.enabledCheckbox.elt.querySelector('input').id = 'enabled';
+        this.enabledCheckbox.changed(this.toggleEnabled);
+
+         // Add properties for ports and connection status
+         this.availablePorts = [];
+         this.serverUnavailable = false;
+         this.connectedPort = null;
+ 
+         // Initialize dropdown before any possible calls to updatePortsDropdown
+         this.portDropdown = createSelect();
+         this.portDropdown.position(screenWidth + 15, 40);
+         this.updatePortsDropdown([]); // Initialize with a default message
+ 
+         // Create a connect button
+         this.connectButton = createButton("Connect");
+         this.connectButton.position(screenWidth + 175, 38);
+         this.connectButton.mousePressed(() => this.toggleConnection());
+         
+         // Add a label to show connection status
+         this.connectionStatusLabel = createP("Not connected");
+         this.connectionStatusLabel.position(screenWidth + 250, 23);
+
+          // Add text input for feed rate
+        createP("Feed Rate:").position(screenWidth + 15, 55);
+        this.feedRateInput = createInput(this.feedRate.toString(), "number");
+        this.feedRateInput.position(screenWidth + 90, 70);
+        this.feedRateInput.size(80);
+        this.feedRateInput.input(() => this.updateFeedRate());
+
+        // Add text input for cutting depth
+        createP("Z Depth:").position(screenWidth + 15, 85);
+        this.cuttingDepthInput = createInput(this.cuttingDepth.toString(), "number");
+        this.cuttingDepthInput.position(screenWidth + 90, 100);
+        this.cuttingDepthInput.size(80);
+        this.cuttingDepthInput.input(() => this.updateCuttingDepth());
+
+         // Create Set New Zero button
+         this.setZeroButton = createButton('Set New Zero');
+         this.setZeroButton.position(screenWidth + 15, 140);
+         this.setZeroButton.mousePressed(() => this.setNewZero());
+ 
+         // Create Return to Zero button
+         this.returnZeroButton = createButton('Return to Zero');
+         this.returnZeroButton.position(screenWidth + 125, 140); // Adjust position as needed
+         this.returnZeroButton.mousePressed(() => this.returnToZero());
+
+         // Create Start Button to initialize
+        this.startButton = createButton('Start');
+        this.startButton.position(screenWidth + 15, 180); // Position the button below existing controls
+        this.startButton.mousePressed(() => this.initializePlotter());
+        this.startButton.attribute('disabled', true); // Initially disabled until connected
+
+
         // Handle connection errors
-        try{
+        try {
             this.socket = io();
             this.socketConnected = true;
+            this.serverUnavailable = false;
         } catch (error) {
             console.log(error);
             this.socketConnected = false;
             this.enabled = false;
+            this.serverUnavailable = true;
+            this.updatePortsDropdown([]);
         }
-        if(this.socketConnected){
+
+        if (this.socketConnected) {
             this.socket.on('plotter', (data) => this.onMessage(data));
             this.socket.on('connect_error', (error) => {
                 console.error('Connection error:', error);
+                this.serverUnavailable = true;
+                this.updatePortsDropdown([]);
             });
-    
+
             this.socket.on('connect_timeout', () => {
                 console.error('Connection timed out');
+                this.serverUnavailable = true;
+                this.updatePortsDropdown([]);
             });
-    
-            // Optionally handle disconnect events
+
             this.socket.on('disconnect', (reason) => {
                 console.warn(`Disconnected from server. Reason: ${reason}`);
+                this.connectionStatusLabel.html("Not connected");
+                this.connectButton.html("Connect");
+                this.connectedPort = null;
+            });
+
+            // Fetch available ports from the server
+            this.socket.emit('getPorts');
+            this.socket.on('portsList', (ports) => {
+                this.updatePortsDropdown(ports);
             });
         }
-        this.enabledCheckbox = createCheckbox("Plotting Enabled", false);   
-        this.enabledCheckbox.position(screenWidth+10,10);
-        this.enabledCheckbox.elt.querySelector('input').id = 'enabled';
-        this.enabledCheckbox.changed(this.toggleEnabled);
-        
 
-        this.feedRateSlider = createSlider(0,100);
-        this.feedRateSlider.position(screenWidth+10,30);
+        // this.feedRateSlider = createSlider(0, 100);
+        // this.feedRateSlider.position(screenWidth + 10, 30);
     }
 
-    toggleEnabled(){
-        let checkbox = select('#enabled'); 
-        if(checkbox.checked() == true){
-            if(this.socketConnected == true){
+    updatePortsDropdown(ports) {
+        this.portDropdown.elt.innerHTML = ''; // Clear previous options
+        if (this.serverUnavailable) {
+            this.portDropdown.option('No server connection'); // Fallback message
+        } else if (ports.length === 0) {
+            this.portDropdown.option('No ports available'); // Empty state
+        } else {
+            this.portDropdown.option('Select Port'); // Default option
+            ports.forEach((port) => {
+                this.portDropdown.option(port);
+            });
+        }
+    }
+
+    toggleEnabled() {
+        let checkbox = select('#enabled');
+        if (checkbox.checked() === true) {
+            if (this.socketConnected === true) {
                 this.enabled = true;
             } else {
                 checkbox.checked(false);
-                console.log('socket not connected, cannot enable plotter functions!')
-            } 
+                console.log('socket not connected, cannot enable plotter functions!');
+            }
         } else {
             this.enabled = false;
+        }
+    }
+
+    toggleConnection() {
+        if (this.connectedPort) {
+            // If already connected, disconnect
+            this.disconnectFromPort();
+        } else {
+            // Otherwise, attempt to connect
+            this.connectToPort();
+        }
+    }
+
+    connectToPort() {
+        const selectedPort = this.portDropdown.value();
+        if (!this.socketConnected || this.serverUnavailable) {
+            this.connectionStatusLabel.html("No server connection");
+            this.startButton.attribute('disabled', true); // Disable Start button
+            return;
+        }
+        if (selectedPort === "Select Port" || selectedPort === "No ports available") {
+            this.connectionStatusLabel.html("Please select a valid port");
+            this.startButton.attribute('disabled', true); // Disable Start button
+            return;
+        }
+
+        // Emit the selected port to the server
+        this.socket.emit('connectToPort', selectedPort, (response) => {
+            if (response.success) {
+                this.connectedPort = selectedPort;
+                this.connectionStatusLabel.html("Connected to " + selectedPort);
+                this.startButton.removeAttribute('disabled'); // Enable Start button
+                this.connectButton.html("Disconnect"); // Update button text
+            } else {
+                this.connectionStatusLabel.html("Failed to connect: " + response.error);
+            }
+        });
+    }
+
+    disconnectFromPort() {
+        if (!this.connectedPort) return;
+
+        // Emit disconnect signal to the server
+        this.socket.emit('disconnectPort', this.connectedPort, (response) => {
+            if (response.success) {
+                this.connectionStatusLabel.html("Disconnected");
+                this.connectButton.html("Connect"); // Update button text
+                this.connectedPort = null;
+            } else {
+                this.connectionStatusLabel.html("Failed to disconnect: " + response.error);
+            }
+        });
+    }
+
+    fetchPorts() {
+        if (this.socketConnected) {
+            this.socket.emit('getPorts');
+        }
+    }
+
+    onMessage(data) {
+        console.log(data);
+    }
+
+    updateFeedRate() {
+        const newFeedRate = parseInt(this.feedRateInput.value());
+        if (!isNaN(newFeedRate) && newFeedRate > 0) {
+            this.feedRate = newFeedRate;
+            //console.log("Updated Feed Rate:", this.feedRate); // Log the updated feed rate
+        } else {
+            this.feedRateInput.value(this.feedRate.toString()); // Reset invalid input
+        }
+    }
+
+    updateCuttingDepth() {
+        const newCuttingDepth = parseFloat(this.cuttingDepthInput.value());
+        if (!isNaN(newCuttingDepth) && newCuttingDepth > 0) {
+            this.cuttingDepth = newCuttingDepth;
+            //console.log("Updated Z Depth:", this.cuttingDepth); // Log the updated Z depth
+        } else {
+            this.cuttingDepthInput.value(this.cuttingDepth.toString()); // Reset invalid input
+        }
+    }
+
+    setNewZero() {
+        const gcode = "G92 X0 Y0 Z0 ;";
+        console.log(gcode);
+        this.queue.push(gcode);
+        if (this.enabled) {
+            this.socket.emit("gCodeOutput", gcode + '\n');
+        }
+    }
+
+    returnToZero() {
+        const gcode = "G00 X0 Y0 Z0 ;";
+        console.log(gcode);
+        this.queue.push(gcode);
+        if (this.enabled) {
+            this.socket.emit("gCodeOutput", gcode + '\n');
+        }
+    }
+
+    initializePlotter() {
+        console.log('Initializing plotter...');
+        if (this.socketConnected) {
+            this.socket.emit('gCodeOutput', 'G92 X0Y0Z0'); // Set zero
+            this.socket.emit('gCodeOutput', 'G28'); // Home the plotter
+            console.log('Initialization complete: Zero set and homing done.');
+        } else {
+            console.log('Socket not connected. Cannot initialize plotter.');
         }
     }
 

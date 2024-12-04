@@ -2,7 +2,7 @@ let plotter;
 
 
 function setup() {
-    plotter = new GPlotter(594, 841, 500,true); // page w in mm, page h in mm, screen display width
+    plotter = new GPlotter(594, 841, 500, true); // page w in mm, page h in mm, screen display width
     createCanvas(plotter.screenWidth, plotter.canvasHeight);
     frameRate(30);
 }
@@ -47,7 +47,7 @@ function keyPressed() {
         let randomHeight = random(10, height / 2);
         let randomX = Math.floor(random(randomWidth / 2, width - (randomWidth / 2)));
         let randomY = Math.floor(random(randomHeight / 2, height - (randomHeight / 2)));
-        plotter.ellipse(randomX, randomY, randomWidth, randomHeight, false);
+        plotter.ellipse(randomX, randomY, randomWidth, randomHeight, true);
     } else if (key === 'p') {
         let randomX = random(width);
         let randomY = random(height);
