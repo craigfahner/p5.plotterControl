@@ -2,7 +2,7 @@ let plotter;
 
 
 function setup() {
-    plotter = new GPlotter(594, 841, 500, true); // page w in mm, page h in mm, screen display width
+    plotter = new GPlotter(594, 841, 500, false); // page w in mm, page h in mm, screen display width
     createCanvas(plotter.screenWidth, plotter.canvasHeight);
     frameRate(30);
 }

@@ -17,7 +17,7 @@ class GPlotter {
         this.enabledCheckbox = createCheckbox("Plotting Enabled", false);
         this.enabledCheckbox.position(screenWidth + 10, 10);
         this.enabledCheckbox.elt.querySelector('input').id = 'enabled';
-        this.enabledCheckbox.changed(this.toggleEnabled);
+        this.enabledCheckbox.changed(() => this.toggleEnabled());
 
          // Add properties for ports and connection status
          this.availablePorts = [];
@@ -90,6 +90,19 @@ class GPlotter {
                 this.updatePortsDropdown([]);
             });
 
+            this.socket.on('portList', (data) => {
+                console.log(data);
+                this.updatePortsDropdown(data);
+
+            });
+
+            this.socket.on('portConnected', (data) =>{
+                this.connectedPort = data;
+                this.connectionStatusLabel.html("Connected to " + data);
+                this.startButton.removeAttribute('disabled'); // Enable Start button
+                this.connectButton.html("Disconnect"); // Update button text
+            });
+
             this.socket.on('connect_timeout', () => {
                 console.error('Connection timed out');
                 this.serverUnavailable = true;
@@ -104,10 +117,7 @@ class GPlotter {
             });
 
             // Fetch available ports from the server
-            this.socket.emit('getPorts');
-            this.socket.on('portsList', (ports) => {
-                this.updatePortsDropdown(ports);
-            });
+            //this.socket.emit('getPorts');
         }
 
         // this.feedRateSlider = createSlider(0, 100);
@@ -131,11 +141,11 @@ class GPlotter {
     toggleEnabled() {
         let checkbox = select('#enabled');
         if (checkbox.checked() === true) {
-            if (this.socketConnected === true) {
+            if (this.socketConnected === true && this.connectedPort) {
                 this.enabled = true;
             } else {
                 checkbox.checked(false);
-                console.log('socket not connected, cannot enable plotter functions!');
+                console.log('cannot enable plotter functions');
             }
         } else {
             this.enabled = false;
@@ -166,7 +176,7 @@ class GPlotter {
         }
 
         // Emit the selected port to the server
-        this.socket.emit('connectToPort', selectedPort, (response) => {
+        this.socket.emit('portSelect', selectedPort, (response) => {
             if (response.success) {
                 this.connectedPort = selectedPort;
                 this.connectionStatusLabel.html("Connected to " + selectedPort);
@@ -226,8 +236,9 @@ class GPlotter {
     setNewZero() {
         const gcode = "G92 X0 Y0 Z0 ;";
         console.log(gcode);
-        this.queue.push(gcode);
+        
         if (this.enabled) {
+            this.queue.push(gcode);
             this.socket.emit("gCodeOutput", gcode + '\n');
         }
     }
@@ -235,8 +246,9 @@ class GPlotter {
     returnToZero() {
         const gcode = "G00 X0 Y0 Z0 ;";
         console.log(gcode);
-        this.queue.push(gcode);
+        
         if (this.enabled) {
+            this.queue.push(gcode);
             this.socket.emit("gCodeOutput", gcode + '\n');
         }
     }
@@ -430,8 +442,9 @@ class GPlotter {
             }
         }
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
-        this.queue = this.queue.concat(gcode);
+        
         if (this.enabled) {
+            this.queue = this.queue.concat(gcode);
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
         }
     }
@@ -455,8 +468,9 @@ class GPlotter {
             "M30 ; Program end and reset"
         ];
         console.log(gcode.join("\n"));
-        this.queue = this.queue.concat(gcode);
+        
         if (this.enabled) {
+            this.queue = this.queue.concat(gcode);
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
         }
     }
@@ -493,8 +507,9 @@ class GPlotter {
         }
 
         console.log(gcode.join("\n"));
-        this.queue = this.queue.concat(gcode);
+        
         if (this.enabled) {
+            this.queue = this.queue.concat(gcode);
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
         }
     }
@@ -529,8 +544,9 @@ class GPlotter {
             gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${this.feedRate} ; Draw arc segment`);
         }
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
-        this.queue = this.queue.concat(gcode);
+        
         if (this.enabled) {
+            this.queue = this.queue.concat(gcode);
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
         }
     }
@@ -676,8 +692,9 @@ class GPlotter {
         }
         //console.log(gcode.join("\n"));
         console.log(`Generating shape: Close=${close}, Fill=${fill}`);
-        this.queue = this.queue.concat(gcode);
+        
         if (this.enabled) {
+            this.queue = this.queue.concat(gcode);
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
         }
     }
@@ -732,8 +749,9 @@ class GPlotter {
             }
         }
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
-        this.queue = this.queue.concat(gcode);
+       
         if (this.enabled) {
+            this.queue = this.queue.concat(gcode);
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
         }
     }
@@ -754,8 +772,9 @@ class GPlotter {
             `G00 Z0 F${this.feedRate} ; Lift tool after marking`,
             "M30 ; Program end and reset"
         ];
-        this.queue = this.queue.concat(gcode);
+        
         if (this.enabled) {
+            this.queue = this.queue.concat(gcode);
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
         }
     }
