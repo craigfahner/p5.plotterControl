@@ -33,7 +33,7 @@ function keyPressed() {
         let randomH = random(10, height / 2);
         let randomX = random(width - randomW);
         let randomY = random(height - randomH);
-        plotter.rectangle(randomX, randomY, randomW, randomH, false);
+        plotter.rectangle(randomX, randomY, randomW, randomH, true);
     } else if (key === 'a') {
         let randomWidth = random(10, width / 2);
         let randomHeight = random(10, height / 2);

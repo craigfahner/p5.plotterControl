@@ -48,9 +48,32 @@ io.on('connection', (socket) => {
       io.emit('plotter',data.toString());
     });
   });
+  // socket.on('disconnectPort', () => {
+  //   serialPort.write('G01 Z0\nG28\n'); //rtz
+  //   serialPort.close(function (err) {
+  //     console.log('port closed', err);
+  //   });
+  // });
+  socket.on('disconnectPort', (callback) => {
+    if (serialPort && serialPort.isOpen) {
+      serialPort.close((err) => {
+        if (err) {
+          console.error('Error closing port:', err.message);
+          if (callback) callback({ success: false, error: err.message });
+        } else {
+          console.log('Port successfully disconnected');
+          if (callback) callback({ success: true });
+          serialPort = null;
+        }
+      });
+    } else {
+      console.log('No port to disconnect');
+      if (callback) callback({ success: false, error: 'No port is currently connected' });
+    }
+  });
   socket.on('disconnect', (reason) => {  
     if(serialPort){
-      serialPort.write('G01 Z0\nG28\n');
+      serialPort.write('G01 Z0\nG28\n'); //rtz
 
     serialPort.close(function (err) {
       console.log('port closed', err);

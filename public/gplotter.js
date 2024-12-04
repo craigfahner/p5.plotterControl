@@ -31,12 +31,12 @@ class GPlotter {
  
          // Create a connect button
          this.connectButton = createButton("Connect");
-         this.connectButton.position(screenWidth + 175, 38);
+         this.connectButton.position(screenWidth + 185, 38);
          this.connectButton.mousePressed(() => this.toggleConnection());
          
          // Add a label to show connection status
          this.connectionStatusLabel = createP("Not connected");
-         this.connectionStatusLabel.position(screenWidth + 250, 23);
+         this.connectionStatusLabel.position(screenWidth + 280, 23);
 
           // Add text input for feed rate
         createP("Feed Rate:").position(screenWidth + 15, 55);
@@ -61,13 +61,6 @@ class GPlotter {
          this.returnZeroButton = createButton('Return to Zero');
          this.returnZeroButton.position(screenWidth + 125, 140); // Adjust position as needed
          this.returnZeroButton.mousePressed(() => this.returnToZero());
-
-         // Create Start Button to initialize
-        this.startButton = createButton('Start');
-        this.startButton.position(screenWidth + 15, 180); // Position the button below existing controls
-        this.startButton.mousePressed(() => this.initializePlotter());
-        this.startButton.attribute('disabled', true); // Initially disabled until connected
-
 
         // Handle connection errors
         try {
@@ -99,7 +92,6 @@ class GPlotter {
             this.socket.on('portConnected', (data) =>{
                 this.connectedPort = data;
                 this.connectionStatusLabel.html("Connected to " + data);
-                this.startButton.removeAttribute('disabled'); // Enable Start button
                 this.connectButton.html("Disconnect"); // Update button text
             });
 
@@ -119,9 +111,6 @@ class GPlotter {
             // Fetch available ports from the server
             //this.socket.emit('getPorts');
         }
-
-        // this.feedRateSlider = createSlider(0, 100);
-        // this.feedRateSlider.position(screenWidth + 10, 30);
     }
 
     updatePortsDropdown(ports) {
@@ -143,6 +132,9 @@ class GPlotter {
         if (checkbox.checked() === true) {
             if (this.socketConnected === true && this.connectedPort) {
                 this.enabled = true;
+                const gcode = "G92 X0 Y0 Z0 ;";
+                this.queue.push(gcode);
+                this.socket.emit("gCodeOutput", gcode + '\n');
             } else {
                 checkbox.checked(false);
                 console.log('cannot enable plotter functions');
@@ -166,12 +158,10 @@ class GPlotter {
         const selectedPort = this.portDropdown.value();
         if (!this.socketConnected || this.serverUnavailable) {
             this.connectionStatusLabel.html("No server connection");
-            this.startButton.attribute('disabled', true); // Disable Start button
             return;
         }
         if (selectedPort === "Select Port" || selectedPort === "No ports available") {
             this.connectionStatusLabel.html("Please select a valid port");
-            this.startButton.attribute('disabled', true); // Disable Start button
             return;
         }
 
@@ -180,7 +170,6 @@ class GPlotter {
             if (response.success) {
                 this.connectedPort = selectedPort;
                 this.connectionStatusLabel.html("Connected to " + selectedPort);
-                this.startButton.removeAttribute('disabled'); // Enable Start button
                 this.connectButton.html("Disconnect"); // Update button text
             } else {
                 this.connectionStatusLabel.html("Failed to connect: " + response.error);
@@ -191,16 +180,16 @@ class GPlotter {
     disconnectFromPort() {
         if (!this.connectedPort) return;
 
-        // Emit disconnect signal to the server
-        this.socket.emit('disconnectPort', this.connectedPort, (response) => {
-            if (response.success) {
-                this.connectionStatusLabel.html("Disconnected");
-                this.connectButton.html("Connect"); // Update button text
-                this.connectedPort = null;
-            } else {
-                this.connectionStatusLabel.html("Failed to disconnect: " + response.error);
-            }
-        });
+        // Emit a custom 'disconnectPort' event to the server
+        this.socket.emit('disconnectPort', (response) => {
+        if (response.success) {
+            this.connectionStatusLabel.html("Disconnected");
+            this.connectButton.html("Connect"); // Update button text
+            this.connectedPort = null;
+        } else {
+            this.connectionStatusLabel.html("Failed to disconnect: " + response.error);
+        }
+    });
     }
 
     fetchPorts() {
@@ -250,17 +239,6 @@ class GPlotter {
         if (this.enabled) {
             this.queue.push(gcode);
             this.socket.emit("gCodeOutput", gcode + '\n');
-        }
-    }
-
-    initializePlotter() {
-        console.log('Initializing plotter...');
-        if (this.socketConnected) {
-            this.socket.emit('gCodeOutput', 'G92 X0Y0Z0'); // Set zero
-            this.socket.emit('gCodeOutput', 'G28'); // Home the plotter
-            console.log('Initialization complete: Zero set and homing done.');
-        } else {
-            console.log('Socket not connected. Cannot initialize plotter.');
         }
     }
 
@@ -712,7 +690,7 @@ class GPlotter {
     ellipse(x, y, w, h, fill = true) {
         this.drawnShapes.push({ type: 'ellipse', x: x, y:y, width: w, height: h, fill: fill});
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
-        let mmY = y * this.ixelToMMRatio;
+        let mmY = y * this.pixelToMMRatio;
         let mmW = w * this.pixelToMMRatio;
         let mmH = h * this.pixelToMMRatio;
         this.ellipseToGCode(mmX, mmY, mmW, mmH, fill);
@@ -749,7 +727,7 @@ class GPlotter {
             }
         }
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
-       
+        console.log(gcode.join("\n"));
         if (this.enabled) {
             this.queue = this.queue.concat(gcode);
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
