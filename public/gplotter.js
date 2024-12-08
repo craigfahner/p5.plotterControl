@@ -122,12 +122,12 @@ class GPlotter {
 
     updatePortsDropdown(ports) {
         this.portDropdown.elt.innerHTML = ''; // Clear previous options
-        if (this.serverUnavailable) {
-            this.portDropdown.option('No server connection'); // Fallback message
+        if (!this.socketConnected) {
+            this.portDropdown.option('No server connection'); // Fallback message if not connected
         } else if (ports.length === 0) {
-            this.portDropdown.option('No ports available'); // Empty state
+            this.portDropdown.option('No ports available'); // Empty state when no ports are detected
         } else {
-            this.portDropdown.option('Select Port'); // Default option
+            this.portDropdown.option('Select Port'); // Default option when ports are available
             ports.forEach((port) => {
                 this.portDropdown.option(port);
             });
