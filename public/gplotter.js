@@ -52,14 +52,21 @@ class GPlotter {
         this.cuttingDepthInput.size(80);
         this.cuttingDepthInput.input(() => this.updateCuttingDepth());
 
+        // Add text input for fill gap
+        createP("Fill Gap:").position(screenWidth + 15, 115);
+        this.fillGapInput = createInput(this.fillGap.toString(), "number");
+        this.fillGapInput.position(screenWidth + 90, 130);
+        this.fillGapInput.size(80);
+        this.fillGapInput.input(() => this.updateFillGap());
+
          // Create Set New Zero button
          this.setZeroButton = createButton('Set New Zero');
-         this.setZeroButton.position(screenWidth + 15, 140);
+         this.setZeroButton.position(screenWidth + 15, 165);
          this.setZeroButton.mousePressed(() => this.setNewZero());
  
          // Create Return to Zero button
          this.returnZeroButton = createButton('Return to Zero');
-         this.returnZeroButton.position(screenWidth + 125, 140); // Adjust position as needed
+         this.returnZeroButton.position(screenWidth + 125, 165); // Adjust position as needed
          this.returnZeroButton.mousePressed(() => this.returnToZero());
 
         // Handle connection errors
@@ -222,6 +229,16 @@ class GPlotter {
         }
     }
 
+    updateFillGap() {
+        const newFillGap = parseFloat(this.fillGapInput.value());
+        if (!isNaN(newFillGap) && newFillGap > 0) {
+            this.fillGap = newFillGap;
+            console.log("Updated Fill Gap:", this.fillGap); // Log the updated fill gap
+        } else {
+            this.fillGapInput.value(this.fillGap.toString()); // Reset invalid input
+        }
+    }    
+
     setNewZero() {
         const gcode = "G92 X0 Y0 Z0 ;";
         console.log(gcode);
@@ -249,8 +266,7 @@ class GPlotter {
                 ellipse(shape.x, shape.y, shape.diameter, shape.diameter);
                 if (shape.fill) {
                     let radius = shape.diameter / 2;
-                    let fillGap = 5; // Match the `this.fillGap` used in G-code
-                    for (let yy = shape.y - radius; yy <= shape.y + radius; yy += fillGap) {
+                    for (let yy = shape.y - radius; yy <= shape.y + radius; yy += shape.fillGap) {
                         let innerValue = radius * radius - ((yy - shape.y) * (yy - shape.y));
                         if (innerValue >= 0) { // Valid horizontal line within the circle
                             let x1 = shape.x - Math.sqrt(innerValue);
@@ -263,14 +279,18 @@ class GPlotter {
                 rect(shape.x, shape.y, shape.width, shape.height);
                 if (shape.fill) {
                     let fillGap = 5; // Match the this.fillGap used in G-code
-                    for (let yy = shape.y; yy <= shape.y + shape.height; yy += fillGap) {
+                    for (let yy = shape.y; yy <= shape.y + shape.height; yy += shape.fillGap) {
                         let x1 = shape.x; // Left edge
                         let x2 = shape.x + shape.width; // Right edge
                         line(x1, yy, x2, yy); // Draw a horizontal fill line
                     }
                 }
             } else if (shape.type === 'arc') {
+                push(); // Save the current drawing state
+                noFill();
+                stroke(0);
                 arc(shape.x, shape.y, shape.width, shape.height, shape.start, shape.stop);
+                pop(); // Restore the previous drawing state
             } else if (shape.type === 'line') {
                 line(shape.x1, shape.y1, shape.x2, shape.y2);
             } else if (shape.type === 'customShape') {
@@ -298,9 +318,8 @@ class GPlotter {
             if (shape.fill && shape.isClosed) {
                 let minY = Math.min(...shape.vertices.map(v => v.y));
                 let maxY = Math.max(...shape.vertices.map(v => v.y));
-                let fillGap = 5; // Same as the G-code gap
 
-                for (let yy = minY; yy <= maxY; yy += fillGap) {
+                for (let yy = minY; yy <= maxY; yy += shape.fillGap) {
                     let intersections = [];
 
                     // Find intersection points of the horizontal line (yy) with shape edges
@@ -366,10 +385,8 @@ class GPlotter {
             if (shape.fill) {
                 let r_w = shape.width / 2; // Horizontal radius
                 let r_h = shape.height / 2; // Vertical radius
-                let fillGap = 5; // Match the G-code fill gap
-
                 // Generate fill lines
-                for (let yy = shape.y - r_h; yy <= shape.y + r_h; yy += fillGap) {
+                for (let yy = shape.y - r_h; yy <= shape.y + r_h; yy += shape.fillGap) {
                     let xOffset = r_w * Math.sqrt(1 - Math.pow((yy - shape.y) / r_h, 2));
                     if (!isNaN(xOffset)) { // Ensure valid offset calculation
                         let x1 = shape.x - xOffset;
@@ -385,7 +402,7 @@ class GPlotter {
     }
 
     circle(x, y, d, fill=true) {
-        this.drawnShapes.push({ type: 'circle', x: x, y: y, diameter: d, fill:fill });
+        this.drawnShapes.push({ type: 'circle', x: x, y: y, diameter: d, fill: fill, fillGap: this.fillGap });
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
         let mmY = y * this.pixelToMMRatio;
         let mmD = d * this.pixelToMMRatio;
@@ -406,6 +423,10 @@ class GPlotter {
             let yPos = y + radius * Math.sin(angle);
             gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${this.feedRate} ; Draw circle segment`);
         }
+
+        // Lift the tool after completing the circle outline
+        gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
+
         if (fill) {
             for (let yy = y - radius; yy <= y + radius; yy += this.fillGap) { // Using fill gap
                 let innerValue = radius * radius - ((yy - y) * (yy - y));
@@ -420,7 +441,7 @@ class GPlotter {
             }
         }
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
-        
+        console.log(gcode.join("\n"));
         if (this.enabled) {
             this.queue = this.queue.concat(gcode);
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
@@ -454,7 +475,7 @@ class GPlotter {
     }
 
     rectangle(x, y, w, h, fill = true) {
-        this.drawnShapes.push({ type: 'rectangle', x: x, y: y, width: w, height: h, fill:fill });
+        this.drawnShapes.push({ type: 'rectangle', x: x, y: y, width: w, height: h, fill: fill, fillGap: this.fillGap });
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
         let mmY = y * this.pixelToMMRatio;
         let mmW = w * this.pixelToMMRatio;
@@ -475,6 +496,8 @@ class GPlotter {
             "M30 ; Program end and reset"
         ];
 
+        gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
+
         if (fill) {
             for (let yy = y; yy <= y + h; yy += this.fillGap) { // Using fill gap
                 gcode.push(`G00 X${(x - w).toFixed(3)} Y${yy.toFixed(3)} ; Move to fill start`);
@@ -494,41 +517,58 @@ class GPlotter {
 
     arc(x, y, w, h, start, stop) {
         this.drawnShapes.push({ type: 'arc', x: x, y: y, width: w, height: h, start: start, stop: stop });
+    
+        // Apply x mirroring based on the plotter origin
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
         let mmY = y * this.pixelToMMRatio;
         let mmW = w * this.pixelToMMRatio;
         let mmH = h * this.pixelToMMRatio;
+    
         this.arcToGCode(mmX, mmY, mmW, mmH, start, stop);
+    }     
+
+    normalizeAngle(angle) {
+        return ((angle % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
     }
 
     arcToGCode(x, y, w, h, start, stop) {
-        let r_w = w / 2;
-        let r_h = h / 2;
+        let r_w = w / 2; // Horizontal radius
+        let r_h = h / 2; // Vertical radius
         let segments = 36;
         let gcode = ["G90 ; Absolute positioning"];
-        let isUpward = (start === PI && stop === TWO_PI);
-        let startAngle = isUpward ? PI : 0;
-        let stopAngle = isUpward ? TWO_PI : PI;
-        let startX = x + r_w * Math.cos(startAngle);
-        let startY = y + r_h * Math.sin(startAngle);
+    
+        // Normalize angles to be within 0 to 2 * PI
+        start = this.normalizeAngle(start);
+        stop = this.normalizeAngle(stop);
+    
+        // Ensure the stop angle is greater than the start angle
+        if (stop < start) stop += 2 * Math.PI;
+    
+        let startX = x - r_w * Math.cos(start); // Mirror x for the start point
+        let startY = y + r_h * Math.sin(start); // Keep y as is
+    
         gcode.push(`G00 X${startX.toFixed(3)} Y${startY.toFixed(3)} F${this.feedRate} ; Move to start of arc`);
         gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for cutting`);
-        let angleIncrement = (stopAngle - startAngle) / segments;
+    
+        let angleIncrement = (stop - start) / segments;
+    
         for (let i = 0; i <= segments; i++) {
-            let angle = startAngle + i * angleIncrement;
-            if (angle > stopAngle) break;
-            let xPos = x + r_w * Math.cos(angle);
-            let yPos = isUpward ? y - Math.abs(r_h * Math.sin(angle)) : y + Math.abs(r_h * Math.sin(angle));
+            let angle = start + i * angleIncrement;
+            let xPos = x - r_w * Math.cos(angle); // Mirror x
+            let yPos = y + r_h * Math.sin(angle); // Keep y as is
             gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${this.feedRate} ; Draw arc segment`);
         }
+    
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
-        
+    
+        console.log(`Generated G-code for Arc:\n${gcode.join("\n")}`);
+    
         if (this.enabled) {
             this.queue = this.queue.concat(gcode);
-            this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
+            this.socket.emit("gCodeOutput", 'G21\n'); // benign G-code instruction to force "ok" message
         }
     }
-
+    
     beginShape() {
         this.drawnShapes.push({ type: 'customShape', vertices: [] });
     }
@@ -546,11 +586,11 @@ class GPlotter {
         shape.type = 'customShape';
         shape.isClosed = close === CLOSE; // Set whether the shape should be closed based on `CLOSE`
         shape.fill = fill;
-        this.generateGCodeForCustomShape(shape.vertices, close === CLOSE, fill);
-
+        shape.fillGap = this.fillGap; // Assign the current fillGap to the shape
+        this.generateGCodeForCustomShape(shape.vertices, close === CLOSE, fill, shape.fillGap);
     }
 
-    generateGCodeForCustomShape(vertices, close, fill = true) {
+    generateGCodeForCustomShape(vertices, close, fill = true, fillGap) {
         let gcode = ["G90 ; Absolute positioning"];
         if (vertices.length > 0) {
             // Move to the start of the shape
@@ -599,7 +639,7 @@ class GPlotter {
             let maxY = Math.max(...vertices.map(v => v.y)) * this.pixelToMMRatio;
 
             // Traverse from minY to maxY at fillGap intervals
-            for (let yy = minY; yy <= maxY; yy += this.fillGap) {
+            for (let yy = minY; yy <= maxY; yy += fillGap) {
                 let intersections = [];
 
                 // Find intersection points of the horizontal line (yy) with the shape's edges
@@ -670,6 +710,7 @@ class GPlotter {
         }
         //console.log(gcode.join("\n"));
         console.log(`Generating shape: Close=${close}, Fill=${fill}`);
+        console.log(gcode.join("\n"));
         
         if (this.enabled) {
             this.queue = this.queue.concat(gcode);
@@ -688,7 +729,7 @@ class GPlotter {
     }
 
     ellipse(x, y, w, h, fill = true) {
-        this.drawnShapes.push({ type: 'ellipse', x: x, y:y, width: w, height: h, fill: fill});
+        this.drawnShapes.push({ type: 'ellipse', x: x, y: y, width: w, height: h, fill: fill, fillGap: this.fillGap });
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
         let mmY = y * this.pixelToMMRatio;
         let mmW = w * this.pixelToMMRatio;
@@ -712,6 +753,8 @@ class GPlotter {
             let yPos = y + r_h * Math.sin(angle);
             gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${this.feedRate} ; Draw ellipse segment`);
         }
+        gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
+
         // Generate fill lines
         if (fill) {
             for (let yy = y - r_h; yy <= y + r_h; yy += this.fillGap) { // Using a hatch spacing of 5mm

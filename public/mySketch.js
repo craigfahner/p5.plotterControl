@@ -21,7 +21,7 @@ function keyPressed() {
         let randomDiameter = random(10, width / 2);
         let randomX = Math.floor(random(randomDiameter / 2, width - (randomDiameter / 2)));
         let randomY = Math.floor(random(randomDiameter / 2, height - (randomDiameter / 2)));
-        plotter.circle(randomX, randomY, randomDiameter, false);
+        plotter.circle(randomX, randomY, randomDiameter, true);
     } else if (key === 'l') {
         let randomX1 = random(width);
         let randomY1 = random(height);
