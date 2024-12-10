@@ -276,23 +276,63 @@ class GPlotter {
                     }
                 }
             } else if (shape.type === 'rectangle') {
-                rect(shape.x, shape.y, shape.width, shape.height);
+                push();
+    
+                // Translate to the center of the rectangle
+                translate(shape.x, shape.y);
+
+                // Apply negative rotation to match G-code rotation
+                rotate(radians(-(shape.rotation || 0)));
+
+                // Draw the rectangle outline
+                rectMode(CENTER);
+                rect(0, 0, shape.width, shape.height);
+
+                // Draw the fill lines if 'fill' is enabled
                 if (shape.fill) {
-                    let fillGap = 5; // Match the this.fillGap used in G-code
-                    for (let yy = shape.y; yy <= shape.y + shape.height; yy += shape.fillGap) {
-                        let x1 = shape.x; // Left edge
-                        let x2 = shape.x + shape.width; // Right edge
+                    let fillGap = shape.fillGap || 5; // Default fill gap if not specified
+                    let halfWidth = shape.width / 2;
+                    let halfHeight = shape.height / 2;
+
+                    for (let yy = -halfHeight; yy <= halfHeight; yy += fillGap) {
+                        let x1 = -halfWidth; // Left edge relative to the center
+                        let x2 = halfWidth;  // Right edge relative to the center
                         line(x1, yy, x2, yy); // Draw a horizontal fill line
                     }
                 }
+
+                pop(); // Restore the previous drawing state
             } else if (shape.type === 'arc') {
                 push(); // Save the current drawing state
+
+                // Translate to the center of the arc
+                translate(shape.x, shape.y);
+
+                // Apply negative rotation to match G-code rotation
+                rotate(radians(-(shape.angle || 0)));
+
+                // Draw the arc relative to the center
                 noFill();
-                stroke(0);
-                arc(shape.x, shape.y, shape.width, shape.height, shape.start, shape.stop);
+                arc(0, 0, shape.width, shape.height, shape.start, shape.stop);
+
                 pop(); // Restore the previous drawing state
             } else if (shape.type === 'line') {
-                line(shape.x1, shape.y1, shape.x2, shape.y2);
+                push(); // Save the current drawing state
+
+                // Calculate the center of the line
+                let centerX = (shape.x1 + shape.x2) / 2;
+                let centerY = (shape.y1 + shape.y2) / 2;
+
+                // Translate to the center and apply the NEGATIVE rotation to match G-code
+                translate(centerX, centerY);
+                rotate(radians(-(shape.angle || 0))); // Apply negative rotation
+
+                // Draw the line relative to the center
+                let halfX = (shape.x2 - shape.x1) / 2;
+                let halfY = (shape.y2 - shape.y1) / 2;
+                line(-halfX, -halfY, halfX, halfY);
+
+                pop(); // Restore the previous drawing state
             } else if (shape.type === 'customShape') {
                 beginShape();
                 shape.vertices.forEach((v, index) => {
@@ -380,21 +420,33 @@ class GPlotter {
                 }
             }
             } else if (shape.type === 'ellipse') {
-                ellipse(shape.x, shape.y, shape.width, shape.height);
+                push(); // Save the current drawing state
+
+                // Translate to the center of the ellipse
+                translate(shape.x, shape.y);
+
+                // Apply negative rotation to match G-code rotation
+                rotate(radians(-(shape.angle || 0)));
+
+                noFill();
+                ellipse(0, 0, shape.width, shape.height);
+
                 // Simulate the fill if enabled
-            if (shape.fill) {
-                let r_w = shape.width / 2; // Horizontal radius
-                let r_h = shape.height / 2; // Vertical radius
-                // Generate fill lines
-                for (let yy = shape.y - r_h; yy <= shape.y + r_h; yy += shape.fillGap) {
-                    let xOffset = r_w * Math.sqrt(1 - Math.pow((yy - shape.y) / r_h, 2));
-                    if (!isNaN(xOffset)) { // Ensure valid offset calculation
-                        let x1 = shape.x - xOffset;
-                        let x2 = shape.x + xOffset;
-                        line(x1, yy, x2, yy); // Draw the fill line
+                if (shape.fill) {
+                    let r_w = shape.width / 2; // Horizontal radius
+                    let r_h = shape.height / 2; // Vertical radius
+
+                    for (let yy = -r_h; yy <= r_h; yy += shape.fillGap) {
+                        let xOffset = r_w * Math.sqrt(1 - Math.pow(yy / r_h, 2));
+                        if (!isNaN(xOffset)) { // Ensure valid offset calculation
+                            let x1 = -xOffset;
+                            let x2 = xOffset;
+                            line(x1, yy, x2, yy); // Draw the fill line relative to the center
+                        }
                     }
                 }
-            }
+
+                pop(); // Restore the previous drawing state
             } else if (shape.type === 'point') {
                 point(shape.x, shape.y);
             }
@@ -448,15 +500,25 @@ class GPlotter {
         }
     }
 
-    line(x1, y1, x2, y2) {
-        this.drawnShapes.push({ type: 'line', x1: x1, y1: y1, x2: x2, y2: y2 });
+    line(x1, y1, x2, y2, angle = 0) {
+        this.drawnShapes.push({ type: 'line', x1: x1, y1: y1, x2: x2, y2: y2, angle: angle });
+    
+        // Convert pixels to millimeters
         let mmX1 = this.pageWidth - x1 * this.pixelToMMRatio;
         let mmY1 = y1 * this.pixelToMMRatio;
         let mmX2 = this.pageWidth - x2 * this.pixelToMMRatio;
         let mmY2 = y2 * this.pixelToMMRatio;
-        this.lineToGCode(mmX1, mmY1, mmX2, mmY2);
+    
+        // Apply rotation transformation
+        let centerX = (mmX1 + mmX2) / 2;
+        let centerY = (mmY1 + mmY2) / 2;
+    
+        let rotatedStart = this.rotatePoint(mmX1, mmY1, centerX, centerY, angle);
+        let rotatedEnd = this.rotatePoint(mmX2, mmY2, centerX, centerY, angle);
+    
+        this.lineToGCode(rotatedStart.x, rotatedStart.y, rotatedEnd.x, rotatedEnd.y);
     }
-
+    
     lineToGCode(x1, y1, x2, y2) {
         let gcode = [
             "G90 ; Absolute positioning",
@@ -473,68 +535,122 @@ class GPlotter {
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
         }
     }
+    
+    // Helper function to rotate a point around a center by a given angle
+    rotatePoint(x, y, centerX, centerY, angle) {
+        let radians = angle * (Math.PI / 180); // Convert degrees to radians
+        let cosA = Math.cos(radians);
+        let sinA = Math.sin(radians);
+    
+        let dx = x - centerX;
+        let dy = y - centerY;
+    
+        return {
+            x: centerX + (dx * cosA - dy * sinA),
+            y: centerY + (dx * sinA + dy * cosA)
+        };
+    }    
 
-    rectangle(x, y, w, h, fill = true) {
-        this.drawnShapes.push({ type: 'rectangle', x: x, y: y, width: w, height: h, fill: fill, fillGap: this.fillGap });
+    rectangle(x, y, w, h, fill = true, rotation = 0) {
+        this.drawnShapes.push({ type: 'rectangle', x: x, y: y, width: w, height: h, fill: fill, rotation: rotation });
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
         let mmY = y * this.pixelToMMRatio;
         let mmW = w * this.pixelToMMRatio;
         let mmH = h * this.pixelToMMRatio;
-        this.rectangleToGCode(mmX, mmY, mmW, mmH, fill);
-    }
+        this.rectangleToGCode(mmX, mmY, mmW, mmH, fill, rotation);
+    }    
 
-    rectangleToGCode(x, y, w, h, fill) {
-        let gcode = [
-            "G90 ; Absolute positioning",
-            `G00 X${x.toFixed(3)} Y${y.toFixed(3)} F${this.feedRate} ; Move to rect start`,
-            `G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for cutting`,
-            `G01 X${x.toFixed(3)} Y${(y + h).toFixed(3)} F${this.feedRate} ; Draw left edge`,
-            `G01 X${(x - w).toFixed(3)} Y${(y + h).toFixed(3)} F${this.feedRate} ; Draw top edge`,
-            `G01 X${(x - w).toFixed(3)} Y${y.toFixed(3)} F${this.feedRate} ; Draw right edge`,
-            `G01 X${x.toFixed(3)} Y${y.toFixed(3)} F${this.feedRate} ; Draw bottom edge`,
-            `G00 Z0 F${this.feedRate} ; Lift tool after cutting`,
-            "M30 ; Program end and reset"
+    rectangleToGCode(x, y, w, h, fill, rotation = 0) {
+        let gcode = ["G90 ; Absolute positioning"];
+    
+        // Convert rotation to radians
+        let rad = radians(rotation);
+    
+        // Calculate rectangle corner points with rotation around the center
+        let halfW = w / 2;
+        let halfH = h / 2;
+    
+        // Define the four corners relative to the center (x, y)
+        let corners = [
+            { dx: -halfW, dy: -halfH }, // Top-left
+            { dx: halfW, dy: -halfH },  // Top-right
+            { dx: halfW, dy: halfH },   // Bottom-right
+            { dx: -halfW, dy: halfH }   // Bottom-left
         ];
-
+    
+        // Apply rotation to each corner
+        let rotatedCorners = corners.map(corner => {
+            return {
+                x: x + corner.dx * cos(rad) - corner.dy * sin(rad),
+                y: y + corner.dx * sin(rad) + corner.dy * cos(rad)
+            };
+        });
+    
+        // Move to the starting point (top-left corner)
+        gcode.push(`G00 X${rotatedCorners[0].x.toFixed(3)} Y${rotatedCorners[0].y.toFixed(3)} F${this.feedRate} ; Move to rect start`);
+        gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for cutting`);
+    
+        // Draw edges connecting the corners
+        for (let i = 1; i < rotatedCorners.length; i++) {
+            gcode.push(`G01 X${rotatedCorners[i].x.toFixed(3)} Y${rotatedCorners[i].y.toFixed(3)} F${this.feedRate} ; Draw edge`);
+        }
+        // Close the rectangle by returning to the starting point
+        gcode.push(`G01 X${rotatedCorners[0].x.toFixed(3)} Y${rotatedCorners[0].y.toFixed(3)} F${this.feedRate} ; Close rectangle`);
+    
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
-
+    
+        // Generate fill lines if 'fill' is true
         if (fill) {
-            for (let yy = y; yy <= y + h; yy += this.fillGap) { // Using fill gap
-                gcode.push(`G00 X${(x - w).toFixed(3)} Y${yy.toFixed(3)} ; Move to fill start`);
+            let fillStep = this.fillGap;
+            for (let yy = -halfH; yy <= halfH; yy += fillStep) {
+                let startX = -halfW;
+                let endX = halfW;
+    
+                // Rotate fill line endpoints
+                let startXRot = x + startX * cos(rad) - yy * sin(rad);
+                let startYRot = y + startX * sin(rad) + yy * cos(rad);
+                let endXRot = x + endX * cos(rad) - yy * sin(rad);
+                let endYRot = y + endX * sin(rad) + yy * cos(rad);
+    
+                gcode.push(`G00 X${startXRot.toFixed(3)} Y${startYRot.toFixed(3)} ; Move to fill start`);
                 gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for filling`);
-                gcode.push(`G01 X${x.toFixed(3)} Y${yy.toFixed(3)} F${this.feedRate} ; Fill line`);
+                gcode.push(`G01 X${endXRot.toFixed(3)} Y${endYRot.toFixed(3)} F${this.feedRate} ; Draw fill line`);
                 gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after fill line`);
             }
         }
-
+    
+        gcode.push("M30 ; Program end and reset");
+    
+        // Output G-code to console
         console.log(gcode.join("\n"));
-        
+    
+        // Send G-code to the plotter if enabled
         if (this.enabled) {
             this.queue = this.queue.concat(gcode);
-            this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
+            this.socket.emit("gCodeOutput", 'G21\n'); // benign G-code instruction to force "ok" message
         }
-    }
+    }    
 
-    arc(x, y, w, h, start, stop) {
-        this.drawnShapes.push({ type: 'arc', x: x, y: y, width: w, height: h, start: start, stop: stop });
-    
+    arc(x, y, w, h, start, stop, angle = 0) {
+        this.drawnShapes.push({ type: 'arc', x: x, y: y, width: w, height: h, start: start, stop: stop, angle: angle });
+        
         // Apply x mirroring based on the plotter origin
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
         let mmY = y * this.pixelToMMRatio;
         let mmW = w * this.pixelToMMRatio;
         let mmH = h * this.pixelToMMRatio;
     
-        this.arcToGCode(mmX, mmY, mmW, mmH, start, stop);
+        this.arcToGCode(mmX, mmY, mmW, mmH, start, stop, angle);
     }     
 
     normalizeAngle(angle) {
         return ((angle % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
     }
 
-    arcToGCode(x, y, w, h, start, stop) {
+    arcToGCode(x, y, w, h, start, stop, angle) {
         let r_w = w / 2; // Horizontal radius
         let r_h = h / 2; // Vertical radius
-        let segments = 36;
+        let segments = 50; // Increased segments for higher precision
         let gcode = ["G90 ; Absolute positioning"];
     
         // Normalize angles to be within 0 to 2 * PI
@@ -544,19 +660,25 @@ class GPlotter {
         // Ensure the stop angle is greater than the start angle
         if (stop < start) stop += 2 * Math.PI;
     
-        let startX = x - r_w * Math.cos(start); // Mirror x for the start point
-        let startY = y + r_h * Math.sin(start); // Keep y as is
+        // Calculate the starting point with rotation
+        let startX = x - r_w * Math.cos(start);
+        let startY = y + r_h * Math.sin(start);
     
-        gcode.push(`G00 X${startX.toFixed(3)} Y${startY.toFixed(3)} F${this.feedRate} ; Move to start of arc`);
+        // Apply rotation transformation to the start point
+        let rotatedStart = this.applyRotation(startX, startY, x, y, angle);
+        gcode.push(`G00 X${rotatedStart.x.toFixed(3)} Y${rotatedStart.y.toFixed(3)} F${this.feedRate} ; Move to start of arc`);
         gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for cutting`);
     
         let angleIncrement = (stop - start) / segments;
     
-        for (let i = 0; i <= segments; i++) {
-            let angle = start + i * angleIncrement;
-            let xPos = x - r_w * Math.cos(angle); // Mirror x
-            let yPos = y + r_h * Math.sin(angle); // Keep y as is
-            gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${this.feedRate} ; Draw arc segment`);
+        for (let i = 1; i <= segments; i++) {
+            let currentAngle = start + i * angleIncrement;
+            let xPos = x - r_w * Math.cos(currentAngle);
+            let yPos = y + r_h * Math.sin(currentAngle);
+    
+            // Apply rotation to each segment point
+            let rotatedPoint = this.applyRotation(xPos, yPos, x, y, angle);
+            gcode.push(`G01 X${rotatedPoint.x.toFixed(3)} Y${rotatedPoint.y.toFixed(3)} F${this.feedRate} ; Draw arc segment`);
         }
     
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
@@ -567,6 +689,20 @@ class GPlotter {
             this.queue = this.queue.concat(gcode);
             this.socket.emit("gCodeOutput", 'G21\n'); // benign G-code instruction to force "ok" message
         }
+    }
+         
+    
+    applyRotation(x, y, centerX, centerY, angle) {
+        let radiansAngle = radians(angle);
+        let cosA = Math.cos(radiansAngle);
+        let sinA = Math.sin(radiansAngle);
+        let dx = x - centerX;
+        let dy = y - centerY;
+    
+        return {
+            x: centerX + (dx * cosA - dy * sinA),
+            y: centerY + (dx * sinA + dy * cosA)
+        };
     }
     
     beginShape() {
@@ -728,54 +864,84 @@ class GPlotter {
         );
     }
 
-    ellipse(x, y, w, h, fill = true) {
-        this.drawnShapes.push({ type: 'ellipse', x: x, y: y, width: w, height: h, fill: fill, fillGap: this.fillGap });
+    ellipse(x, y, w, h, fill = true, angle = 0) {
+        this.drawnShapes.push({ type: 'ellipse', x: x, y: y, width: w, height: h, fill: fill, fillGap: this.fillGap, angle: angle });
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
         let mmY = y * this.pixelToMMRatio;
         let mmW = w * this.pixelToMMRatio;
         let mmH = h * this.pixelToMMRatio;
-        this.ellipseToGCode(mmX, mmY, mmW, mmH, fill);
-    }
+        this.ellipseToGCode(mmX, mmY, mmW, mmH, fill, angle);
+    }    
 
-    ellipseToGCode(x, y, w, h, fill) {
+    ellipseToGCode(x, y, w, h, fill, angle) {
         let r_w = w / 2;
         let r_h = h / 2;
         let segments = 36;
         let gcode = ["G90 ; Absolute positioning"];
+    
+        // Calculate the starting point with rotation
         let startX = x + r_w;
         let startY = y;
-        gcode.push(`G00 X${startX.toFixed(3)} Y${startY.toFixed(3)} F${this.feedRate} ; Move to start of ellipse`);
+        let rotatedStart = this.applyRotation(startX, startY, x, y, angle);
+    
+        gcode.push(`G00 X${rotatedStart.x.toFixed(3)} Y${rotatedStart.y.toFixed(3)} F${this.feedRate} ; Move to start of ellipse`);
         gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for cutting`);
+    
         let angleIncrement = (2 * Math.PI) / segments;
+    
         for (let i = 0; i <= segments; i++) {
-            let angle = i * angleIncrement;
-            let xPos = x + r_w * Math.cos(angle);
-            let yPos = y + r_h * Math.sin(angle);
-            gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${this.feedRate} ; Draw ellipse segment`);
+            let theta = i * angleIncrement;
+            let xPos = x + r_w * Math.cos(theta);
+            let yPos = y + r_h * Math.sin(theta);
+    
+            // Apply rotation to each point along the ellipse
+            let rotatedPoint = this.applyRotation(xPos, yPos, x, y, angle);
+            gcode.push(`G01 X${rotatedPoint.x.toFixed(3)} Y${rotatedPoint.y.toFixed(3)} F${this.feedRate} ; Draw ellipse segment`);
         }
+    
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
-
-        // Generate fill lines
+    
+        // Generate fill lines with rotation
         if (fill) {
-            for (let yy = y - r_h; yy <= y + r_h; yy += this.fillGap) { // Using a hatch spacing of 5mm
+            for (let yy = y - r_h; yy <= y + r_h; yy += this.fillGap) {
                 let xOffset = r_w * Math.sqrt(1 - Math.pow((yy - y) / r_h, 2));
-                if (!isNaN(xOffset)) { // Ensure that the value is valid
+                if (!isNaN(xOffset)) {
                     let x1 = x - xOffset;
                     let x2 = x + xOffset;
-                    gcode.push(`G00 X${x1.toFixed(3)} Y${yy.toFixed(3)} ; Move to fill start`);
+    
+                    // Apply rotation to fill lines
+                    let rotatedStartFill = this.applyRotation(x1, yy, x, y, angle);
+                    let rotatedEndFill = this.applyRotation(x2, yy, x, y, angle);
+    
+                    gcode.push(`G00 X${rotatedStartFill.x.toFixed(3)} Y${rotatedStartFill.y.toFixed(3)} ; Move to fill start`);
                     gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for filling`);
-                    gcode.push(`G01 X${x2.toFixed(3)} Y${yy.toFixed(3)} F${this.feedRate} ; Fill line`);
+                    gcode.push(`G01 X${rotatedEndFill.x.toFixed(3)} Y${rotatedEndFill.y.toFixed(3)} F${this.feedRate} ; Fill line`);
                     gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after fill line`);
                 }
             }
         }
-        gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`, "M30 ; Program end and reset");
+    
+        gcode.push("M30 ; Program end and reset");
         console.log(gcode.join("\n"));
+    
         if (this.enabled) {
             this.queue = this.queue.concat(gcode);
-            this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
+            this.socket.emit("gCodeOutput", 'G21\n'); // benign G-code instruction to force "ok" message
         }
     }
+    
+    applyRotation(x, y, centerX, centerY, angle) {
+        let radiansAngle = radians(angle);
+        let cosA = Math.cos(radiansAngle);
+        let sinA = Math.sin(radiansAngle);
+        let dx = x - centerX;
+        let dy = y - centerY;
+    
+        return {
+            x: centerX + (dx * cosA - dy * sinA),
+            y: centerY + (dx * sinA + dy * cosA)
+        };
+    }    
 
     point(x, y) {
         this.drawnShapes.push({ type: 'point', x: x, y: y });
