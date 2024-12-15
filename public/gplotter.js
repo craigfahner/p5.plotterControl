@@ -461,7 +461,7 @@ class GPlotter {
         });
     }
 
-    circle(x, y, d, fill=true) {
+    circle(x, y, d, fill) {
         this.drawnShapes.push({ type: 'circle', x: x, y: y, diameter: d, fill: fill, fillGap: this.fillGap });
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
         let mmY = y * this.pixelToMMRatio;
@@ -562,7 +562,7 @@ class GPlotter {
         };
     }
 
-    rectangle(x, y, w, h, fill = true, angle = 0) {
+    rectangle(x, y, w, h, fill, angle = 0) {
         this.drawnShapes.push({ type: 'rectangle', x: x, y: y, width: w, height: h, fill: fill, angle: angle });
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
         let mmY = y * this.pixelToMMRatio;
@@ -728,7 +728,7 @@ class GPlotter {
         this.drawnShapes[this.drawnShapes.length - 1].vertices.push({ x: x, y: y, isCurve: true });
     }
 
-    endShape(close = false, fill = true) {
+    endShape(close = false, fill) {
         let shape = this.drawnShapes[this.drawnShapes.length - 1];
         shape.type = 'customShape';
         shape.isClosed = close === CLOSE; // Set whether the shape should be closed based on `CLOSE`
@@ -737,7 +737,7 @@ class GPlotter {
         this.generateGCodeForCustomShape(shape.vertices, close === CLOSE, fill, shape.fillGap);
     }
 
-    generateGCodeForCustomShape(vertices, close, fill = true, fillGap) {
+    generateGCodeForCustomShape(vertices, close, fill, fillGap) {
         let gcode = ["G90 ; Absolute positioning"];
         if (vertices.length > 0) {
             // Move to the start of the shape
@@ -875,7 +875,7 @@ class GPlotter {
         );
     }
 
-    ellipse(x, y, w, h, fill = true, angle = 0) {
+    ellipse(x, y, w, h, fill, angle = 0) {
         this.drawnShapes.push({ type: 'ellipse', x: x, y: y, width: w, height: h, fill: fill, fillGap: this.fillGap, angle: angle });
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
         let mmY = y * this.pixelToMMRatio;
