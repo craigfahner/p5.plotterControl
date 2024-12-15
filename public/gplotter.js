@@ -12,7 +12,8 @@ class GPlotter {
         this.pixelToMMRatio = pageWidth / screenWidth;
         this.socketConnected = false;
         this.fillGap = 5;
-
+        this.lastEndPoint = null; // Track the endpoint within the class
+        
         // Create Enable Checkbox to enable plotting
         this.enabledCheckbox = createCheckbox("Plotting Enabled", false);
         this.enabledCheckbox.position(screenWidth + 10, 10);
@@ -68,6 +69,13 @@ class GPlotter {
          this.returnZeroButton = createButton('Return to Zero');
          this.returnZeroButton.position(screenWidth + 125, 165); // Adjust position as needed
          this.returnZeroButton.mousePressed(() => this.returnToZero());
+
+        // Create Clear Queue button
+        this.clearQueueButton = createButton('Clear Queue (Emergency Stop)');
+        this.clearQueueButton.position(screenWidth+15, 200);
+        this.clearQueueButton.mousePressed(() => {
+            this.queue = [];
+        });
 
         // Handle connection errors
         try {
@@ -282,7 +290,7 @@ class GPlotter {
                 translate(shape.x, shape.y);
 
                 // Apply negative rotation to match G-code rotation
-                rotate(radians(-(shape.rotation || 0)));
+                rotate(radians(-(shape.angle || 0)));
 
                 // Draw the rectangle outline
                 rectMode(CENTER);
@@ -502,69 +510,72 @@ class GPlotter {
 
     line(x1, y1, x2, y2, angle = 0) {
         this.drawnShapes.push({ type: 'line', x1: x1, y1: y1, x2: x2, y2: y2, angle: angle });
-    
+
         // Convert pixels to millimeters
         let mmX1 = this.pageWidth - x1 * this.pixelToMMRatio;
         let mmY1 = y1 * this.pixelToMMRatio;
         let mmX2 = this.pageWidth - x2 * this.pixelToMMRatio;
         let mmY2 = y2 * this.pixelToMMRatio;
-    
+
         // Apply rotation transformation
         let centerX = (mmX1 + mmX2) / 2;
         let centerY = (mmY1 + mmY2) / 2;
-    
+
         let rotatedStart = this.rotatePoint(mmX1, mmY1, centerX, centerY, angle);
         let rotatedEnd = this.rotatePoint(mmX2, mmY2, centerX, centerY, angle);
-    
+
         this.lineToGCode(rotatedStart.x, rotatedStart.y, rotatedEnd.x, rotatedEnd.y);
     }
-    
+
     lineToGCode(x1, y1, x2, y2) {
-        let gcode = [
-            "G90 ; Absolute positioning",
-            `G00 X${x1.toFixed(3)} Y${y1.toFixed(3)} F${this.feedRate} ; Move to start of line`,
-            `G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for cutting`,
-            `G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${this.feedRate} ; Draw line to endpoint`,
-            `G00 Z0 F${this.feedRate} ; Lift tool after cutting`,
-            "M30 ; Program end and reset"
-        ];
+        let gcode = ["G90 ; Absolute positioning"];
+
+        if (!this.lastEndPoint || this.lastEndPoint.x !== x1 || this.lastEndPoint.y !== y1) {
+            // Move to the starting point only if it's not connected to the last line
+            gcode.push(`G00 X${x1.toFixed(3)} Y${y1.toFixed(3)} F${this.feedRate} ; Move to start of line`);
+            gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for cutting`);
+        }
+
+        gcode.push(`G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${this.feedRate} ; Draw line to endpoint`);
+
+        // Update the last endpoint
+        this.lastEndPoint = { x: x2, y: y2 };
+
         console.log(gcode.join("\n"));
-        
+
         if (this.enabled) {
             this.queue = this.queue.concat(gcode);
             this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
         }
     }
-    
-    // Helper function to rotate a point around a center by a given angle
+
     rotatePoint(x, y, centerX, centerY, angle) {
-        let radians = angle * (Math.PI / 180); // Convert degrees to radians
-        let cosA = Math.cos(radians);
-        let sinA = Math.sin(radians);
-    
+        let radiansAngle = radians(angle);
+        let cosA = Math.cos(radiansAngle);
+        let sinA = Math.sin(radiansAngle);
         let dx = x - centerX;
         let dy = y - centerY;
-    
+
         return {
             x: centerX + (dx * cosA - dy * sinA),
             y: centerY + (dx * sinA + dy * cosA)
         };
-    }    
+    }
 
-    rectangle(x, y, w, h, fill = true, rotation = 0) {
-        this.drawnShapes.push({ type: 'rectangle', x: x, y: y, width: w, height: h, fill: fill, rotation: rotation });
+    rectangle(x, y, w, h, fill = true, angle = 0) {
+        this.drawnShapes.push({ type: 'rectangle', x: x, y: y, width: w, height: h, fill: fill, angle: angle });
         let mmX = this.pageWidth - x * this.pixelToMMRatio;
         let mmY = y * this.pixelToMMRatio;
         let mmW = w * this.pixelToMMRatio;
         let mmH = h * this.pixelToMMRatio;
-        this.rectangleToGCode(mmX, mmY, mmW, mmH, fill, rotation);
+        this.rectangleToGCode(mmX, mmY, mmW, mmH, fill, angle);
     }    
-
-    rectangleToGCode(x, y, w, h, fill, rotation = 0) {
+    
+    rectangleToGCode(x, y, w, h, fill, angle = 0) {
         let gcode = ["G90 ; Absolute positioning"];
     
-        // Convert rotation to radians
-        let rad = radians(rotation);
+        // Convert angle to radians
+        let rad = radians(angle);
     
         // Calculate rectangle corner points with rotation around the center
         let halfW = w / 2;
