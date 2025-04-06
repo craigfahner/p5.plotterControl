@@ -537,6 +537,7 @@ class GPlotter {
         }
 
         gcode.push(`G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${this.feedRate} ; Draw line to endpoint`);
+        gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after fill line`);
 
         // Update the last endpoint
         this.lastEndPoint = { x: x2, y: y2 };
