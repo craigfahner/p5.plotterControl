@@ -29,3 +29,49 @@ function draw() {
     background(225);
     plotter.display(); // Display drawn shapes
 }
+
+function keyPressed() { // draw different shapes with random parameters with keys
+    if (key === 'c') {
+        let randomDiameter = random(10, width / 2);
+        let randomX = Math.floor(random(randomDiameter / 2, width - (randomDiameter / 2)));
+        let randomY = Math.floor(random(randomDiameter / 2, height - (randomDiameter / 2)));
+        plotter.circle(randomX, randomY, randomDiameter, false);
+        let randomX1 = random(width);
+        let randomY1 = random(height);
+        let randomX2 = random(width);
+        let randomY2 = random(height)
+        plotter.line(randomX1, randomY1, randomX2, randomY2, 0);
+    } else if (key === 'l') {
+        let randomX1 = random(width);
+        let randomY1 = random(height);
+        let randomX2 = random(width);
+        let randomY2 = random(height)
+        plotter.line(randomX1, randomY1, randomX2, randomY2, 0);
+        plotter.line(randomX1, randomY1, randomX2, randomY2, 0);
+        plotter.line(randomX1, randomY1, randomX2, randomY2, 0);
+    } else if (key === 'r') {
+        let randomW = random(10, width / 2);
+        let randomH = random(10, height / 2);
+        let randomX = random(width - randomW);
+        let randomY = random(height - randomH);
+        plotter.rectangle(randomX, randomY, randomW, randomH, false, 30); // apply a 30 degree angle to the rectangles
+        let randomX1 = random(width);
+        let randomY1 = random(height);
+        let randomX2 = random(width);
+        let randomY2 = random(height)
+        plotter.line(randomX1, randomY1, randomX2, randomY2, 0);
+    } else if (key === 'a') {
+        let randomWidth = random(10, width / 2);
+        let randomHeight = random(10, height / 2);
+        let randomX = Math.floor(random(randomWidth / 2, width - (randomWidth / 2)));
+        let randomY = Math.floor(random(randomHeight / 2, height - (randomHeight / 2)));
+        let randomStart = random(2 * PI);
+        let randomStop = random(2 * PI);
+        plotter.arc(randomX, randomY, randomWidth, randomHeight, randomStart, randomStop, 0);
+        let randomX1 = random(width);
+        let randomY1 = random(height);
+        let randomX2 = random(width);
+        let randomY2 = random(height)
+        plotter.line(randomX1, randomY1, randomX2, randomY2, 0);
+    }
+}
