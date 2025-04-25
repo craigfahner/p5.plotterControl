@@ -70,6 +70,21 @@ class GPlotter {
          this.returnZeroButton.position(screenWidth + 125, 165); // Adjust position as needed
          this.returnZeroButton.mousePressed(() => this.returnToZero());
 
+         // Create a Draw Border Button
+        this.drawBorderButton = createButton('Draw Border');
+        this.drawBorderButton.position(this.screenWidth + 15, 235);
+        this.drawBorderButton.mousePressed(() => this.drawBorder());
+
+        // Create a Lift Pen Button
+        this.liftPenButton = createButton('Lift Pen');
+        this.liftPenButton.position(this.screenWidth + 15, 305);
+        this.liftPenButton.mousePressed(() => this.liftPen());
+
+        // Lift and Drop Pen Button
+        this.liftDropButton = createButton('Lift and Drop Pen');
+        this.liftDropButton.position(this.screenWidth+15, 270); // Adjust position if needed
+        this.liftDropButton.mousePressed(() => this.LiftandDropPen());
+
         // Create Clear Queue button
         this.clearQueueButton = createButton('Clear Queue (Emergency Stop)');
         this.clearQueueButton.position(screenWidth+15, 200);
@@ -258,13 +273,69 @@ class GPlotter {
     }
 
     returnToZero() {
-        const gcode = "G00 X0 Y0 Z0 ;";
-        console.log(gcode);
-        
         if (this.enabled) {
-            this.queue.push(gcode);
-            this.socket.emit("gCodeOutput", gcode + '\n');
+            // First lift the pen
+            this.queue.push(`G00 Z0 F${this.feedRate} ; Lift tool before moving to zero`);
+    
+            // Then move to (0,0)
+            this.queue.push(`G00 X0 Y0 ; Move to home position`);
+    
+            // Optionally, end program if needed
+            // this.queue.push('M30 ; Program end and reset');
+    
+            // Important: Emit benign G21 to trigger the next queued move
+            this.socket.emit("gCodeOutput", 'G21\n'); 
         }
+    }  
+
+    drawBorder() {
+        const maxX = this.screenWidth;
+        const maxY = this.canvasHeight;
+    
+        console.log('Drawing border...');
+        this.socket.emit('gCodeOutput', 'G00 Z0\n');
+    
+        if (this.enabled) {
+            // FIRST: lift and move to (0,0)
+            this.queue.push(`G00 Z0 F${this.feedRate} ; Lift pen`);
+            this.queue.push(`G00 X0 Y0 F${this.feedRate} ; Rapid move to top-left`);
+            // SECOND: drop the pen down BEFORE drawing
+            this.queue.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool to start drawing border`);
+            
+            // Now DRAW manually by G1 moves, instead of using this.line()
+            this.queue.push(`G01 X${maxX.toFixed(3)} Y0 F${this.feedRate} ; Top edge`);
+            this.queue.push(`G01 X${maxX.toFixed(3)} Y${maxY.toFixed(3)} F${this.feedRate} ; Right edge`);
+            this.queue.push(`G01 X0 Y${maxY.toFixed(3)} F${this.feedRate} ; Bottom edge`);
+            this.queue.push(`G01 X0 Y0 F${this.feedRate} ; Left edge, close`);
+            
+            // Finally lift pen and return home
+            this.queue.push(`G00 Z0 F${this.feedRate} ; Lift pen after border`);
+            this.queue.push('G00 X0 Y0 Z0 ; Return to zero');
+            this.queue.push('M30 ; Program end and reset');
+        }
+    }      
+
+    liftPen() {
+        if (!this.enabled) {
+            console.warn('Plotter not enabled.');
+            return;
+        }
+    
+        console.log('Lifting pen manually...');
+        this.socket.emit('gCodeOutput', 'G00 Z0\n');
+    }  
+
+    LiftandDropPen() {
+        if (!this.enabled) {
+            console.warn('Plotter not enabled.');
+            return;
+        }
+    
+        console.log('Lifting and lowering pen...');
+    
+        // Lift the pen
+        this.socket.emit('gCodeOutput', 'G00 Z0\n');
+        this.socket.emit('gCodeOutput', `G01 Z${this.cuttingDepth} F${this.feedRate}\n`);
     }
 
     display() {
@@ -529,26 +600,23 @@ class GPlotter {
 
     lineToGCode(x1, y1, x2, y2) {
         let gcode = ["G90 ; Absolute positioning"];
-
-        if (!this.lastEndPoint || this.lastEndPoint.x !== x1 || this.lastEndPoint.y !== y1) {
-            // Move to the starting point only if it's not connected to the last line
-            gcode.push(`G00 X${x1.toFixed(3)} Y${y1.toFixed(3)} F${this.feedRate} ; Move to start of line`);
-            gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for cutting`);
-        }
-
+        
+        // Always lift and move to the starting point
+        gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool before moving`);
+        gcode.push(`G00 X${x1.toFixed(3)} Y${y1.toFixed(3)} F${this.feedRate} ; Rapid move to start`);
+        gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for cutting`);
+        
+        // Draw the line
         gcode.push(`G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${this.feedRate} ; Draw line to endpoint`);
-        gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after fill line`);
-
-        // Update the last endpoint
-        this.lastEndPoint = { x: x2, y: y2 };
-
-        console.log(gcode.join("\n"));
-
+        
+        // LIFT after drawing
+        gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after drawing`);
+    
         if (this.enabled) {
             this.queue = this.queue.concat(gcode);
-            this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction to force "ok" message
+            this.socket.emit("gCodeOutput", 'G21\n'); // benign gcode instruction
         }
-    }
+    } 
 
     rotatePoint(x, y, centerX, centerY, angle) {
         let radiansAngle = radians(angle);
