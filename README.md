@@ -163,6 +163,38 @@ plotter.vertex(150, 200);
 plotter.vertex(200, 100);
 plotter.endShape(CLOSE, true);
 ```
+## 8. `plotter.text(textString, fontData, x, y, scale)`
+
+Draws vector text using a Hershey-style font at a given position and scale.
+
+**Parameters:**
+- `textString` (`String`): The text content to draw (e.g., `"Hello World!"`).
+- `fontData` (`Object`): The Hershey font JSON object (e.g., `hershey.futural`) loaded via `loadJSON()`.
+- `x` (`Number`): X-coordinate offset for the start of the text (left baseline).
+- `y` (`Number`): Y-coordinate offset for the baseline of the text.
+- `scale` (`Number`): Multiplier to scale the text size (e.g., `1.5` for 150% size).
+
+**Behavior:**
+- Automatically lifts the pen between character strokes.
+- Uses `beginShape()` and `endShape()` to simulate plotter pen-up and pen-down behavior.
+- Appends drawn shapes to `drawnShapes` and queues G-code instructions if `plotter.enabled` is true.
+
+**Example:**
+
+```js
+let font;
+
+function preload() {
+  font = loadJSON("hersheytext.json");
+}
+
+function setup() {
+  let plotter = new GPlotter(594, 841, 500, true);
+  createCanvas(plotter.screenWidth, plotter.canvasHeight);
+
+  plotter.text("Hello Plotter!", font.futural, 50, 200, 1.5);
+}
+```
 
 These functions allow you to create a variety of shapes on the canvas and generate corresponding G-code if plotting is enabled.
 
@@ -294,3 +326,12 @@ Draws a point.
 
 ### `pointToGCode(x, y)`
 Generates point G-code.
+
+### `text(str, fontData, x, y, scale = 1)`
+Draws a vector-based text string using Hershey-style stroke fonts and generates G-code for each character.
+
+### `pathCommands(pathStr, offsetX, offsetY, scale)`
+Parses a Hershey font path string into a list of movement commands for drawing.
+
+### `pathCommandsForText(font, text, offsetX = 0, offsetY = 0, scale = 1)`
+Converts a text string into a list of vector drawing commands using the Hershey font format.
