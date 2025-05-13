@@ -13,16 +13,23 @@
 // - Ellipse:       plotter.ellipse(x, y, width, height, fill, angle);
 // - Point:         plotter.point(x, y);
 // - Custom Shape:  plotter.beginShape(); plotter.vertex(x, y); plotter.curveVertex(x, y); plotter.endShape(CLOSE, fill);
+// - Text:          let commands = plotter.pathCommandsForText(hershey.futural, "Hello Plotter!", offsetX, offsetY, scale);
+//                  plotter.drawHersheyText(commands);
 //
 // Remember to call `plotter.display()` in the `draw()` function to visualize the shapes.
 //
 // Explore the "examples" folder for more comprehensive usage!
 
 let plotter;
+let hershey;
+
+function preload() {
+  hershey = loadJSON("hersheytext.json");
+}
 
 function setup() {
-    plotter = new GPlotter(594, 841, 594, false); // page w in mm, page h in mm, screen display width
-    createCanvas(plotter.screenWidth, plotter.canvasHeight);
+  plotter = new GPlotter(594, 841, 500, false); 
+  createCanvas(plotter.screenWidth, plotter.canvasHeight);
 }
 
 function draw() {

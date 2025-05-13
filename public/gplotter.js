@@ -1055,6 +1055,65 @@ class GPlotter {
         }
     }
 
+    pathCommands(pathStr, offsetX, offsetY, scale) {
+    let instr = [];
+    let mode = '';
+    for (let token of pathStr.split(' ')) {
+        if (token.charAt(0) === 'M' || token.charAt(0) === 'L') {
+        mode = token.charAt(0);
+        token = token.substr(1);
+        }
+        let [x, y] = token.split(',').map(Number);
+        x = offsetX + x * scale;
+        y = offsetY + y * scale;
+        instr.push({ type: mode, x, y });
+    }
+    return instr;
+    }
+
+    pathCommandsForText(font, text, offsetX = 0, offsetY = 0, scale = 1) {
+    let commands = [];
+    let xOffset = 0;
+    for (let i = 0; i < text.length; i++) {
+        let charIndex = text.charCodeAt(i) - 33;
+        if (charIndex >= 0 && font.chars[charIndex]) {
+        let char = font.chars[charIndex];
+        commands.push(...this.pathCommands(char.d, offsetX + xOffset, offsetY, scale));
+        xOffset += parseInt(char.o) * scale * 2;
+        } else {
+        xOffset += 10 * scale;
+        }
+    }
+    return commands;
+    }
+
+    drawHersheyText(commands) {
+    let currentPath = [];
+
+    for (let i = 0; i < commands.length; i++) {
+        let cmd = commands[i];
+
+        if (cmd.type === 'M') {
+        if (currentPath.length > 0) {
+            this.beginShape();
+            currentPath.forEach(pt => this.vertex(pt.x, pt.y));
+            this.endShape(false, false);
+            currentPath = [];
+        }
+        currentPath.push({ x: cmd.x, y: cmd.y });
+
+        } else if (cmd.type === 'L') {
+        currentPath.push({ x: cmd.x, y: cmd.y });
+        }
+    }
+
+    if (currentPath.length > 0) {
+        this.beginShape();
+        currentPath.forEach(pt => this.vertex(pt.x, pt.y));
+        this.endShape(false, false);
+    }
+    }
+
     onMessage(message) {
         console.log(message);
 
