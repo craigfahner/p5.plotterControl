@@ -13,6 +13,7 @@ class GPlotter {
         this.socketConnected = false;
         this.fillGap = 5;
         this.lastEndPoint = null; // Track the endpoint within the class
+        this.cameraCaptureEnabled = false; // Camera Mode
         
         // Create Enable Checkbox to enable plotting
         this.enabledCheckbox = createCheckbox("Plotting Enabled", false);
@@ -90,6 +91,14 @@ class GPlotter {
         this.clearQueueButton.position(screenWidth+15, 200);
         this.clearQueueButton.mousePressed(() => {
             this.queue = [];
+        });
+
+        // Create a checkbox to toggle camera capture
+        this.cameraToggleCheckbox = createCheckbox("Enable Camera Capture", false);
+        this.cameraToggleCheckbox.position(this.screenWidth + 15, 340); // Adjust Y position as needed
+        this.cameraToggleCheckbox.elt.querySelector('input').id = 'cameraToggle';
+        this.cameraToggleCheckbox.changed(() => {
+            this.cameraCaptureEnabled = this.cameraToggleCheckbox.checked();
         });
 
         // Handle connection errors
@@ -1057,6 +1066,13 @@ class GPlotter {
                 this.queue.splice(0, 1);
                 console.log(this.queue);
             }
+        }
+
+        if (message.includes("MSG:Pgm End")) {
+            console.log("Plotter completed a shape!");
+            if (this.cameraCaptureEnabled) {
+            captureAndSaveImage();
+            }          
         }
     }
 }
