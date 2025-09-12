@@ -56,7 +56,8 @@ server.listen(port, () => {
 });
 
 // Serve static files
-app.use(express.static('public'));
+//app.use(express.static('public'));  // this may be causing windows errors
+app.use('/', express.static(path.join(__dirname, 'public')));
 app.use('/images', express.static(imagesDir));
 
 // Serve main page
