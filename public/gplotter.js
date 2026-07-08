@@ -1,4 +1,4 @@
-// testing drift - july 8 12:12
+// testing reorientation - july 8 12:29
 
 class GPlotter {
     constructor(pageWidth, pageHeight, screenWidth, enabled, margin_left = 0, margin_bottom = 0, margin_right = 0, margin_top = 0) {
@@ -28,6 +28,11 @@ class GPlotter {
         this.socketConnected = false;
         this.fillGap = 5;
         this.lastEndPoint = null; // Track the endpoint within the class
+
+        // When true, output is remapped to match the classroom's Inkscape workflow:
+        // X mirrored, Y negated (see mapX/mapY for the derivation). Off by default
+        // to preserve the currently-tested native/raw coordinate behavior.
+        this.matchInkscapeOrientation = true;
 
         // Create Enable Checkbox to enable plotting
         this.enabledCheckbox = createCheckbox("Plotting Enabled", false);
@@ -162,15 +167,19 @@ class GPlotter {
     }
 
     // Converts a p5.js pixel X coordinate to a plotter X coordinate in mm.
-    // No orientation remapping - raw scale only, pending rebuilt orientation logic.
+    // X is never flipped/mirrored - matchInkscapeOrientation only affects Y.
     mapX(xPixel) {
         return xPixel * this.pixelToMMRatio;
     }
 
     // Converts a p5.js pixel Y coordinate to a plotter Y coordinate in mm.
-    // No orientation remapping - raw scale only, pending rebuilt orientation logic.
+    // When matchInkscapeOrientation is on, Y is negated: the machine is zeroed at
+    // the opposite end of the Y axis for the classroom's Inkscape workflow, which
+    // reverses the Y direction relative to the native/raw behavior.
     mapY(yPixel) {
-        return yPixel * this.pixelToMMRatio;
+        return this.matchInkscapeOrientation
+            ? -(yPixel * this.pixelToMMRatio)
+            : yPixel * this.pixelToMMRatio;
     }
 
     updatePortsDropdown(ports) {
@@ -612,51 +621,39 @@ class GPlotter {
 
     canDraw(x = this.marginLeft, y = this.marginTop) {
         //check if x or y are outside the margins
+        // X's valid range is the same regardless of orientation (mirroring reflects
+        // within [0, pageWidth], it doesn't change the range). Y's valid range flips
+        // sign when matchInkscapeOrientation negates Y (see mapY).
+        let yMin = this.matchInkscapeOrientation ? -(this.pageHeight - this.margin_bottom) : this.margin_top;
+        let yMax = this.matchInkscapeOrientation ? -this.margin_top : this.pageHeight - this.margin_bottom;
         if (x <= this.margin_left || x >= this.pageWidth - this.margin_right ||
-            y <= this.margin_top || y >= this.pageHeight - this.margin_bottom)
+            y <= yMin || y >= yMax)
             return false;
         else return true;
     }
 
     interpolateLine(x1, y1, x2, y2) {
-        // Simple linear interpolation to find intersection with drawing area
-        if (x2 < x1) {
-            //swap points so that x1 is always less than x2 and make this math easier
-            let tempX = x1;
-            let tempY = y1;
-            x1 = x2;
-            y1 = y2;
-            x2 = tempX;
-            y2 = tempY;
-        }
-
-        let dx = x2 - x1;
-        let dy = y2 - y1;
-        let m = dy / dx;
-        let b = y1 - m * x1;
+        // Walk from (x1,y1) to (x2,y2) in equal steps, stepping X and Y
+        // independently (no slope/division), so vertical lines (dx=0, e.g. a
+        // rectangle's left/right edges) don't produce a divide-by-zero -> NaN/Infinity
+        // that would otherwise get embedded in the G-code and trigger a Grbl error.
         let steps = 100; // More steps for better accuracy
-        let xStep = abs(x2 - x1) / steps; //this works bc xs will never be negative in p5
-        let currX = x1;
-        let newX1;
-        let newY1;
-        let newX2;
-        let newY2;
-        if (x2 < x1) // not needed, but will keep in
-            xStep *= -1;
-        let currY;
+        let xStep = (x2 - x1) / steps;
+        let yStep = (y2 - y1) / steps;
+
+        let newX1, newY1, newX2, newY2;
         let couldDrawPrevPoint = false;
         if (this.canDraw(x1, y1)) {
             newX1 = x1;
             newY1 = y1;
             couldDrawPrevPoint = true;
         }
-        if (this.canDraw(x2, y2)) {
-            newX2 = x2;
-            newY2 = y2;
-        }
 
-        for (let i = 1; i <= x2; i++) {
-            currY = m * currX + b;
+        let currX = x1;
+        let currY = y1;
+        for (let i = 1; i <= steps; i++) {
+            currX += xStep;
+            currY += yStep;
             let canDrawCurr = this.canDraw(currX, currY);
             if (canDrawCurr && !couldDrawPrevPoint) {
                 newX1 = currX;
@@ -667,7 +664,11 @@ class GPlotter {
                 newY2 = currY;
             }
             couldDrawPrevPoint = canDrawCurr;
-            currX += xStep;
+        }
+
+        if (this.canDraw(x2, y2)) {
+            newX2 = x2;
+            newY2 = y2;
         }
 
         let retArray = [newX1, newY1, newX2, newY2];
@@ -700,8 +701,10 @@ class GPlotter {
                 }
                 gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${this.feedRate} ; Draw circle segment`);
             } else {
-                if (firstCanDrawSegment == 1)
+                if (firstCanDrawSegment == 1) {
                     gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
+                    firstCanDrawSegment = 0; // allow re-entry to lower the pen again
+                }
             }
         }
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
@@ -985,8 +988,10 @@ class GPlotter {
                 }
                 gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${this.feedRate} ; Draw circle segment`);
             } else {
-                if (firstCanDrawSegment == 1)
+                if (firstCanDrawSegment == 1) {
                     gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
+                    firstCanDrawSegment = 0; // allow re-entry to lower the pen again
+                }
             }
         }
 
@@ -1214,7 +1219,10 @@ class GPlotter {
                 }
                 gcode.push(`G01 X${xPos.toFixed(3)} Y${yPos.toFixed(3)} F${this.feedRate} ; Draw circle segment`);
             } else {
-                gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
+                if (firstCanDrawSegment == 1) {
+                    gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
+                    firstCanDrawSegment = 0; // allow re-entry to lower the pen again
+                }
             }
         }
 
