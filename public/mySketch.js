@@ -61,6 +61,10 @@ function draw() {
 
 function mousePressed() {
   if (mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
+    if (plotter.demoMode) {
+      plotter.handleDemoMousePressed(mouseX, mouseY);
+      return;
+    }
     if (key === "t") {
       plotter.drawString(myString, mouseX, mouseY, 0.5);
     } else if (key === "c") {
@@ -74,5 +78,17 @@ function mousePressed() {
     } else if (key === "e") {
       plotter.ellipse(mouseX, mouseY, 50, 25);
     }
+  }
+}
+
+function mouseDragged() {
+  if (plotter.demoMode) {
+    plotter.handleDemoMouseDragged(mouseX, mouseY);
+  }
+}
+
+function mouseReleased() {
+  if (plotter.demoMode) {
+    plotter.handleDemoMouseReleased(mouseX, mouseY);
   }
 }

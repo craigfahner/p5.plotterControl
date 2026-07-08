@@ -28,6 +28,8 @@ class GPlotter {
         // to preserve the currently-tested native/raw coordinate behavior.
         this.matchInkscapeOrientation = true;
 
+        this.demoMode = false;
+
         // Create Enable Checkbox to enable plotting
         this.enabledCheckbox = createCheckbox("Plotting Enabled", false);
         this.enabledCheckbox.position(screenWidth + 10, 10);
@@ -101,37 +103,152 @@ class GPlotter {
 
         // Create Save Settings button
         this.saveSettingsButton = createButton('Save Settings');
-        this.saveSettingsButton.position(screenWidth + 15, 270);
+        this.saveSettingsButton.position(screenWidth + 15, 280);
         this.saveSettingsButton.mousePressed(() => this.saveSettings());
 
          // Create Set New Zero button
          this.setZeroButton = createButton('Set New Zero');
-         this.setZeroButton.position(screenWidth + 15, 315);
+         this.setZeroButton.position(screenWidth + 15, 335);
          this.setZeroButton.mousePressed(() => this.setNewZero());
 
          // Create Return to Zero button
          this.returnZeroButton = createButton('Return to Zero');
-         this.returnZeroButton.position(screenWidth + 125, 315); // Adjust position as needed
+         this.returnZeroButton.position(screenWidth + 125, 335); // Adjust position as needed
          this.returnZeroButton.mousePressed(() => this.returnToZero());
 
          // Create a Draw Border Button
         this.drawBorderButton = createButton('Draw Border');
-        this.drawBorderButton.position(this.screenWidth + 15, 385);
+        this.drawBorderButton.position(this.screenWidth + 15, 405);
         this.drawBorderButton.mousePressed(() => this.drawBorder());
 
         // Create a Lift Pen Button
         this.liftPenButton = createButton('Lift Pen');
-        this.liftPenButton.position(this.screenWidth + 15, 455);
+        this.liftPenButton.position(this.screenWidth + 15, 475);
         this.liftPenButton.mousePressed(() => this.liftPen());
+
+        // Create Demo Mode Checkbox
+        this.demoModeCheckbox = createCheckbox("Demo Mode", false);
+        this.demoModeCheckbox.position(this.screenWidth + 15, 530);
+        this.demoModeCheckbox.elt.querySelector('input').id = 'demoMode';
+        this.demoModeCheckbox.changed(() => this.toggleDemoMode());
+
+        // Demo mode: column 1 - shape selector radio buttons
+        this.demoShapeRadio = createRadio();
+        this.demoShapeRadio.option('circle', 'Circle');
+        this.demoShapeRadio.option('ellipse', 'Ellipse');
+        this.demoShapeRadio.option('arc', 'Arc');
+        this.demoShapeRadio.option('rectangle', 'Rectangle');
+        this.demoShapeRadio.option('line', 'Line');
+        this.demoShapeRadio.option('freeDraw', 'Free Draw');
+        this.demoShapeRadio.option('text', 'Text');
+        this.demoShapeRadio.selected('circle');
+        this.demoShapeRadio.position(this.screenWidth + 15, 560);
+        // p5's radio options render as inline spans by default - stack them into a list
+        Array.from(this.demoShapeRadio.elt.children).forEach(child => child.style.display = 'block');
+        this.demoShapeRadio.changed(() => this.updateDemoParamVisibility());
+
+        // Demo mode: column 2 - per-shape parameter fields, positioned to the right
+        // of the radio list. Only the group matching the selected radio is shown.
+        const demoParamX = this.screenWidth + 180;
+        const demoParamY = 560;
+
+        this.demoCircleDiameterLabel = createP('Diameter:');
+        this.demoCircleDiameterLabel.position(demoParamX, demoParamY);
+        this.demoCircleDiameterInput = createInput('50', 'number');
+        this.demoCircleDiameterInput.position(demoParamX + 90, demoParamY + 15);
+        this.demoCircleDiameterInput.size(60);
+
+        this.demoEllipseWidthLabel = createP('Width:');
+        this.demoEllipseWidthLabel.position(demoParamX, demoParamY);
+        this.demoEllipseWidthInput = createInput('50', 'number');
+        this.demoEllipseWidthInput.position(demoParamX + 90, demoParamY + 15);
+        this.demoEllipseWidthInput.size(60);
+
+        this.demoEllipseHeightLabel = createP('Height:');
+        this.demoEllipseHeightLabel.position(demoParamX, demoParamY + 30);
+        this.demoEllipseHeightInput = createInput('30', 'number');
+        this.demoEllipseHeightInput.position(demoParamX + 90, demoParamY + 45);
+        this.demoEllipseHeightInput.size(60);
+
+        this.demoArcWidthLabel = createP('Width:');
+        this.demoArcWidthLabel.position(demoParamX, demoParamY);
+        this.demoArcWidthInput = createInput('50', 'number');
+        this.demoArcWidthInput.position(demoParamX + 90, demoParamY + 15);
+        this.demoArcWidthInput.size(60);
+
+        this.demoArcHeightLabel = createP('Height:');
+        this.demoArcHeightLabel.position(demoParamX, demoParamY + 30);
+        this.demoArcHeightInput = createInput('50', 'number');
+        this.demoArcHeightInput.position(demoParamX + 90, demoParamY + 45);
+        this.demoArcHeightInput.size(60);
+
+        this.demoArcStartLabel = createP('Arc start angle (deg):');
+        this.demoArcStartLabel.position(demoParamX, demoParamY + 60);
+        this.demoArcStartInput = createInput('0', 'number');
+        this.demoArcStartInput.position(demoParamX + 90, demoParamY + 75);
+        this.demoArcStartInput.size(60);
+
+        this.demoArcStopLabel = createP('Arc stop angle (deg):');
+        this.demoArcStopLabel.position(demoParamX, demoParamY + 90);
+        this.demoArcStopInput = createInput('180', 'number');
+        this.demoArcStopInput.position(demoParamX + 90, demoParamY + 105);
+        this.demoArcStopInput.size(60);
+
+        this.demoRectWidthLabel = createP('Width:');
+        this.demoRectWidthLabel.position(demoParamX, demoParamY);
+        this.demoRectWidthInput = createInput('50', 'number');
+        this.demoRectWidthInput.position(demoParamX + 90, demoParamY + 15);
+        this.demoRectWidthInput.size(60);
+
+        this.demoRectHeightLabel = createP('Height:');
+        this.demoRectHeightLabel.position(demoParamX, demoParamY + 30);
+        this.demoRectHeightInput = createInput('50', 'number');
+        this.demoRectHeightInput.position(demoParamX + 90, demoParamY + 45);
+        this.demoRectHeightInput.size(60);
+
+        this.demoLineInstructions = createP('Click and drag; when the mouse is released, a line will appear between the mousedown and mouseup point.');
+        this.demoLineInstructions.position(demoParamX, demoParamY);
+        this.demoLineInstructions.style('width', '220px');
+
+        this.demoTextLabel = createP('Text to draw:');
+        this.demoTextLabel.position(demoParamX, demoParamY);
+        this.demoTextInput = createInput('Hi', 'text');
+        this.demoTextInput.position(demoParamX + 90, demoParamY + 15);
+        this.demoTextInput.size(100);
+
+        this.demoTextScaleLabel = createP('Scale:');
+        this.demoTextScaleLabel.position(demoParamX, demoParamY + 30);
+        this.demoTextScaleInput = createInput('0.5', 'number');
+        this.demoTextScaleInput.position(demoParamX + 90, demoParamY + 45);
+        this.demoTextScaleInput.size(60);
+
+        // Groups of elements shown/hidden together based on the selected radio option.
+        // Free Draw has no fields of its own, so it has no entry here.
+        this.demoParamGroups = {
+            circle: [this.demoCircleDiameterLabel, this.demoCircleDiameterInput],
+            ellipse: [this.demoEllipseWidthLabel, this.demoEllipseWidthInput, this.demoEllipseHeightLabel, this.demoEllipseHeightInput],
+            arc: [this.demoArcWidthLabel, this.demoArcWidthInput, this.demoArcHeightLabel, this.demoArcHeightInput, this.demoArcStartLabel, this.demoArcStartInput, this.demoArcStopLabel, this.demoArcStopInput],
+            rectangle: [this.demoRectWidthLabel, this.demoRectWidthInput, this.demoRectHeightLabel, this.demoRectHeightInput],
+            line: [this.demoLineInstructions],
+            freeDraw: [],
+            text: [this.demoTextLabel, this.demoTextInput, this.demoTextScaleLabel, this.demoTextScaleInput]
+        };
+
+        // Demo mode click/drag state (used by Line and Free Draw)
+        this.demoDragStart = null;
+        this.demoDragCurrent = null;
+        this.demoFreeDrawPath = [];
+
+        this.updateDemoModeVisibility(); // demoMode starts false, so this hides everything above
 
         // Lift and Drop Pen Button
         this.liftDropButton = createButton('Lift and Drop Pen');
-        this.liftDropButton.position(this.screenWidth+15, 420); // Adjust position if needed
+        this.liftDropButton.position(this.screenWidth+15, 440); // Adjust position if needed
         this.liftDropButton.mousePressed(() => this.LiftandDropPen());
 
         // Create Clear Queue button
         this.clearQueueButton = createButton('Clear Queue (Emergency Stop)');
-        this.clearQueueButton.position(screenWidth+15, 350);
+        this.clearQueueButton.position(screenWidth+15, 370);
         this.clearQueueButton.mousePressed(() => {
             this.queue = []; // clear the queue
             this.liftPen();
@@ -210,6 +327,17 @@ class GPlotter {
             : yPixel * this.pixelToMMRatio;
     }
 
+    // mapY is linear (a pure negation, no offset), so it flips relative Y deltas
+    // the same way it flips absolute Y positions. Shapes that compute a point as
+    // "already-mapped center + a raw local Y offset" (e.g. an arc's r_h*sin(theta))
+    // need to apply this same sign to that offset, or the local geometry stops
+    // matching the global orientation flip. Symmetric shapes (full circle/ellipse)
+    // never reveal this, since mirroring them vertically gives the same shape back -
+    // but a partial arc does show it, as a flipped opening direction.
+    mapYSign() {
+        return this.matchInkscapeOrientation ? -1 : 1;
+    }
+
     updatePortsDropdown(ports) {
         this.portDropdown.elt.innerHTML = ''; // Clear previous options
         if (!this.socketConnected) {
@@ -240,6 +368,178 @@ class GPlotter {
             this.enabled = false;
             checkbox.checked(false);
         }
+    }
+
+    toggleDemoMode() {
+        let checkbox = select("#demoMode");
+        this.demoMode = checkbox.checked();
+        this.updateDemoModeVisibility();
+    }
+
+    // Shows/hides the demo-mode UI (radio list + param panels) based on this.demoMode.
+    updateDemoModeVisibility() {
+        if (this.demoMode) {
+            this.demoShapeRadio.show();
+            this.updateDemoParamVisibility();
+        } else {
+            this.demoShapeRadio.hide();
+            Object.values(this.demoParamGroups).flat().forEach(el => el.hide());
+        }
+    }
+
+    // Shows only the parameter group matching the currently-selected demo shape.
+    updateDemoParamVisibility() {
+        const selected = this.demoShapeRadio.value();
+        for (const [shape, elements] of Object.entries(this.demoParamGroups)) {
+            elements.forEach(el => (this.demoMode && shape === selected) ? el.show() : el.hide());
+        }
+    }
+
+    // Called by the sketch's mousePressed() when demoMode is active.
+    // Circle/ellipse/arc/rectangle/line don't draw immediately - they record the
+    // press location and are only actually plotted on release (see
+    // handleDemoMouseReleased), sized either by the fields as listed (a plain
+    // click, no drag) or by however far the mouse was dragged (handleDemoMouseDragged
+    // updates the fields live as the drag progresses). The center point stays fixed
+    // at the press location either way.
+    handleDemoMousePressed(x, y) {
+        const shape = this.demoShapeRadio.value();
+        if (shape === 'text') {
+            this.drawString(this.demoTextInput.value(), x, y, parseFloat(this.demoTextScaleInput.value()) || 0.5);
+        } else if (shape === 'freeDraw') {
+            this.demoFreeDrawPath = [{ x, y }];
+        } else {
+            this.demoDragStart = { x, y };
+            this.demoDragCurrent = { x, y };
+        }
+    }
+
+    // Called by the sketch's mouseDragged() when demoMode is active.
+    handleDemoMouseDragged(x, y) {
+        const shape = this.demoShapeRadio.value();
+        this.demoDragCurrent = { x, y };
+
+        if (shape === 'freeDraw') {
+            if (this.demoFreeDrawPath.length > 0) {
+                this.demoFreeDrawPath.push({ x, y });
+            }
+            return;
+        }
+
+        if (!this.demoDragStart) return;
+        const dx = x - this.demoDragStart.x;
+        const dy = y - this.demoDragStart.y;
+
+        switch (shape) {
+            case 'circle':
+                this.demoCircleDiameterInput.value((2 * Math.sqrt(dx * dx + dy * dy)).toFixed(1));
+                break;
+            case 'ellipse':
+                this.demoEllipseWidthInput.value((2 * Math.abs(dx)).toFixed(1));
+                this.demoEllipseHeightInput.value((2 * Math.abs(dy)).toFixed(1));
+                break;
+            case 'arc':
+                this.demoArcWidthInput.value((2 * Math.abs(dx)).toFixed(1));
+                this.demoArcHeightInput.value((2 * Math.abs(dy)).toFixed(1));
+                break;
+            case 'rectangle':
+                this.demoRectWidthInput.value((2 * Math.abs(dx)).toFixed(1));
+                this.demoRectHeightInput.value((2 * Math.abs(dy)).toFixed(1));
+                break;
+            // 'line' needs no field updates - its endpoint is just demoDragCurrent
+        }
+    }
+
+    // Called by the sketch's mouseReleased() when demoMode is active.
+    handleDemoMouseReleased(x, y) {
+        const shape = this.demoShapeRadio.value();
+        if (this.demoDragStart) {
+            const cx = this.demoDragStart.x;
+            const cy = this.demoDragStart.y;
+            switch (shape) {
+                case 'circle':
+                    this.circle(cx, cy, parseFloat(this.demoCircleDiameterInput.value()) || 0, false);
+                    break;
+                case 'ellipse':
+                    this.ellipse(cx, cy, parseFloat(this.demoEllipseWidthInput.value()) || 0, parseFloat(this.demoEllipseHeightInput.value()) || 0, false);
+                    break;
+                case 'arc':
+                    this.arc(
+                        cx, cy,
+                        parseFloat(this.demoArcWidthInput.value()) || 0,
+                        parseFloat(this.demoArcHeightInput.value()) || 0,
+                        radians(parseFloat(this.demoArcStartInput.value()) || 0),
+                        radians(parseFloat(this.demoArcStopInput.value()) || 0),
+                        0
+                    );
+                    break;
+                case 'rectangle':
+                    this.rectangle(cx, cy, parseFloat(this.demoRectWidthInput.value()) || 0, parseFloat(this.demoRectHeightInput.value()) || 0, false);
+                    break;
+                case 'line':
+                    this.line(cx, cy, x, y, 0);
+                    break;
+            }
+        } else if (shape === 'freeDraw' && this.demoFreeDrawPath.length > 1) {
+            const path = this.demoFreeDrawPath;
+            // Draw as one continuous stroke: only lift before the first segment and
+            // after the last, so the pen stays down for the whole path in between.
+            for (let i = 1; i < path.length; i++) {
+                const isFirstSegment = i === 1;
+                const isLastSegment = i === path.length - 1;
+                this.line(path[i - 1].x, path[i - 1].y, path[i].x, path[i].y, 0, isFirstSegment, isLastSegment);
+            }
+        }
+
+        this.demoDragStart = null;
+        this.demoDragCurrent = null;
+        this.demoFreeDrawPath = [];
+    }
+
+    // Draws the live in-progress preview while a demo shape is being pressed/dragged.
+    // Called every frame from display().
+    drawDemoPreview() {
+        if (!this.demoMode) return;
+        const shape = this.demoShapeRadio.value();
+        push();
+        stroke(0);
+        noFill();
+        if (shape === 'line' && this.demoDragStart && this.demoDragCurrent) {
+            line(this.demoDragStart.x, this.demoDragStart.y, this.demoDragCurrent.x, this.demoDragCurrent.y);
+        } else if (shape === 'freeDraw' && this.demoFreeDrawPath.length > 0) {
+            beginShape();
+            for (const pt of this.demoFreeDrawPath) {
+                vertex(pt.x, pt.y);
+            }
+            endShape();
+        } else if (this.demoDragStart && (shape === 'circle' || shape === 'ellipse' || shape === 'arc' || shape === 'rectangle')) {
+            const cx = this.demoDragStart.x;
+            const cy = this.demoDragStart.y;
+            switch (shape) {
+                case 'circle':
+                    circle(cx, cy, parseFloat(this.demoCircleDiameterInput.value()) || 0);
+                    break;
+                case 'ellipse':
+                    ellipse(cx, cy, parseFloat(this.demoEllipseWidthInput.value()) || 0, parseFloat(this.demoEllipseHeightInput.value()) || 0);
+                    break;
+                case 'arc':
+                    arc(
+                        cx, cy,
+                        parseFloat(this.demoArcWidthInput.value()) || 0,
+                        parseFloat(this.demoArcHeightInput.value()) || 0,
+                        radians(parseFloat(this.demoArcStartInput.value()) || 0),
+                        radians(parseFloat(this.demoArcStopInput.value()) || 0)
+                    );
+                    break;
+                case 'rectangle': {
+                    const w = parseFloat(this.demoRectWidthInput.value()) || 0;
+                    const h = parseFloat(this.demoRectHeightInput.value()) || 0;
+                    rect(cx - w / 2, cy - h / 2, w, h);
+                    break;
+                }
+            }
+        }
+        pop();
     }
 
     toggleConnection() {
@@ -703,6 +1003,7 @@ class GPlotter {
 
         this.drawMarginBox();
         this.drawMarginOutline();
+        this.drawDemoPreview();
     }
 
     drawMarginBox() {
@@ -1116,8 +1417,8 @@ class GPlotter {
 
         for (let i = 0; i <= segments; i++) {
             let currentAngle = start + i * angleIncrement;
-            let xPos = x - r_w * Math.cos(currentAngle);
-            let yPos = y + r_h * Math.sin(currentAngle);
+            let xPos = x + r_w * Math.cos(currentAngle);
+            let yPos = y + this.mapYSign() * r_h * Math.sin(currentAngle);
 
             // Apply rotation to each segment point
             let rotatedPoint = this.applyRotation(xPos, yPos, x, y, angle);
