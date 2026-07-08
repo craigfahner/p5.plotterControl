@@ -234,10 +234,20 @@ class GPlotter {
             text: [this.demoTextLabel, this.demoTextInput, this.demoTextScaleLabel, this.demoTextScaleInput]
         };
 
-        // Demo mode click/drag state (used by Line and Free Draw)
+        // Demo mode click/drag state (used by Line, and by circle/ellipse/arc/rectangle)
         this.demoDragStart = null;
         this.demoDragCurrent = null;
-        this.demoFreeDrawPath = [];
+
+        // Public free-draw stroke state (see startFreeDraw/freeDrawTo/endFreeDraw).
+        this.freeDrawLastPoint = null;
+
+        // Demo mode: Free Draw "live" polling state. Drives the public free-draw
+        // API from mouse events, polling on a fixed interval - decoupled from how
+        // often the browser fires mousemove/mouseDragged - rather than on every
+        // drag event, so the pen goes down immediately on press and a new segment
+        // is added on each tick for as long as the mouse stays down.
+        this.demoFreeDrawTimerId = null;
+        this.demoFreeDrawPollMs = 50;
 
         this.updateDemoModeVisibility(); // demoMode starts false, so this hides everything above
 
@@ -407,7 +417,7 @@ class GPlotter {
         if (shape === 'text') {
             this.drawString(this.demoTextInput.value(), x, y, parseFloat(this.demoTextScaleInput.value()) || 0.5);
         } else if (shape === 'freeDraw') {
-            this.demoFreeDrawPath = [{ x, y }];
+            this.startDemoFreeDrawLive(x, y);
         } else {
             this.demoDragStart = { x, y };
             this.demoDragCurrent = { x, y };
@@ -419,12 +429,9 @@ class GPlotter {
         const shape = this.demoShapeRadio.value();
         this.demoDragCurrent = { x, y };
 
-        if (shape === 'freeDraw') {
-            if (this.demoFreeDrawPath.length > 0) {
-                this.demoFreeDrawPath.push({ x, y });
-            }
-            return;
-        }
+        // Free Draw's segments are added by the setInterval poll in
+        // startDemoFreeDrawLive(), not by drag events - nothing to do here.
+        if (shape === 'freeDraw') return;
 
         if (!this.demoDragStart) return;
         const dx = x - this.demoDragStart.x;
@@ -480,20 +487,86 @@ class GPlotter {
                     this.line(cx, cy, x, y, 0);
                     break;
             }
-        } else if (shape === 'freeDraw' && this.demoFreeDrawPath.length > 1) {
-            const path = this.demoFreeDrawPath;
-            // Draw as one continuous stroke: only lift before the first segment and
-            // after the last, so the pen stays down for the whole path in between.
-            for (let i = 1; i < path.length; i++) {
-                const isFirstSegment = i === 1;
-                const isLastSegment = i === path.length - 1;
-                this.line(path[i - 1].x, path[i - 1].y, path[i].x, path[i].y, 0, isFirstSegment, isLastSegment);
-            }
+        }
+        if (shape === 'freeDraw') {
+            this.stopDemoFreeDrawLive();
         }
 
         this.demoDragStart = null;
         this.demoDragCurrent = null;
-        this.demoFreeDrawPath = [];
+    }
+
+    // ---- Public free-draw API ----
+    // Lets any sketch draw a continuous, arbitrary-length stroke by feeding a
+    // start point, a stream of points, and an end call - no polling/timer setup
+    // required. Demo mode's "Free Draw" option is just a thin mouse-driven wrapper
+    // around these same three methods (see startDemoFreeDrawLive below).
+    //
+    // Example:
+    //   plotter.startFreeDraw(x0, y0);
+    //   plotter.freeDrawTo(x1, y1);
+    //   plotter.freeDrawTo(x2, y2);
+    //   ...
+    //   plotter.endFreeDraw();
+
+    // Lowers the pen at (x, y) and begins a new free-draw stroke.
+    startFreeDraw(x, y) {
+        this.freeDrawLastPoint = { x, y };
+        const mmX = this.mapX(x);
+        const mmY = this.mapY(y);
+        this.queueGCode([
+            "G90 ; Absolute positioning",
+            `G00 X${mmX.toFixed(3)} Y${mmY.toFixed(3)} F${this.feedRate} ; Move to free-draw start`,
+            `G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for free-draw`
+        ]);
+    }
+
+    // Draws a continuous line segment from the last free-draw point to (x, y).
+    // No-op if startFreeDraw() hasn't been called (or endFreeDraw() already ended
+    // the stroke).
+    freeDrawTo(x, y) {
+        if (!this.freeDrawLastPoint) return;
+        // Pen is already down from startFreeDraw()/the previous segment, so no
+        // lift before or after - this keeps the whole stroke one continuous line.
+        this.line(this.freeDrawLastPoint.x, this.freeDrawLastPoint.y, x, y, 0, false, false);
+        this.freeDrawLastPoint = { x, y };
+    }
+
+    // Ends the current free-draw stroke and lifts the pen.
+    endFreeDraw() {
+        if (this.freeDrawLastPoint) {
+            this.queueGCode([`G00 Z0 F${this.feedRate} ; Lift tool after free-draw`]);
+        }
+        this.freeDrawLastPoint = null;
+    }
+
+    // ---- Demo mode's mouse-driven wrapper around the free-draw API ----
+
+    // Starts polling the mouse position on a fixed interval - decoupled from how
+    // often the browser actually fires mousemove/mouseDragged events - feeding
+    // each tick's position into freeDrawTo() for as long as the mouse stays down.
+    startDemoFreeDrawLive(x, y) {
+        this.stopDemoFreeDrawLive(); // clear any stray previous timer first
+        this.startFreeDraw(x, y);
+
+        this.demoFreeDrawTimerId = setInterval(() => {
+            if (!mouseIsPressed) {
+                // Safety net in case mouseReleased() didn't fire (e.g. released
+                // outside the window).
+                this.stopDemoFreeDrawLive();
+                return;
+            }
+            this.freeDrawTo(mouseX, mouseY);
+        }, this.demoFreeDrawPollMs);
+    }
+
+    // Stops the live free-draw polling timer (if running) and ends the stroke.
+    stopDemoFreeDrawLive() {
+        if (this.demoFreeDrawTimerId) {
+            clearInterval(this.demoFreeDrawTimerId);
+            this.demoFreeDrawTimerId = null;
+        }
+        this.endFreeDraw();
     }
 
     // Draws the live in-progress preview while a demo shape is being pressed/dragged.
@@ -506,12 +579,9 @@ class GPlotter {
         noFill();
         if (shape === 'line' && this.demoDragStart && this.demoDragCurrent) {
             line(this.demoDragStart.x, this.demoDragStart.y, this.demoDragCurrent.x, this.demoDragCurrent.y);
-        } else if (shape === 'freeDraw' && this.demoFreeDrawPath.length > 0) {
-            beginShape();
-            for (const pt of this.demoFreeDrawPath) {
-                vertex(pt.x, pt.y);
-            }
-            endShape();
+            // Free Draw needs no preview here - its segments are drawn live (queued
+            // and pushed to drawnShapes) by the poll in startDemoFreeDrawLive(), so
+            // they already render each frame via the normal shape-drawing loop above.
         } else if (this.demoDragStart && (shape === 'circle' || shape === 'ellipse' || shape === 'arc' || shape === 'rectangle')) {
             const cx = this.demoDragStart.x;
             const cy = this.demoDragStart.y;
