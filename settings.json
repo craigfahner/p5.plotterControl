@@ -1,0 +1,9 @@
+{
+  "feedRate": 3000,
+  "cuttingDepth": 6.25,
+  "fillGap": 5,
+  "margin_top": 100,
+  "margin_bottom": 100,
+  "margin_left": 100,
+  "margin_right": 100
+}

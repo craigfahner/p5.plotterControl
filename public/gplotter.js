@@ -1,4 +1,4 @@
-// testing reorientation - july 8 12:29
+// testing save/restore settings, jul 8 2:47pm
 
 class GPlotter {
     constructor(pageWidth, pageHeight, screenWidth, enabled, margin_left = 0, margin_bottom = 0, margin_right = 0, margin_top = 0) {
@@ -10,17 +10,11 @@ class GPlotter {
         this.pageWidth = pageWidth;
         this.pageHeight = pageHeight;
 
-        //AK working through this - not finished
-        this.margin_left = margin_right; //this is due to how the pen plotter's coordinate system works - larger y is lower down, and larger x is further left
+        this.margin_left = margin_left;
         this.margin_bottom = margin_bottom;
-        this.margin_right = margin_left; //this is due to how the pen plotter's coordinate system works
+        this.margin_right = margin_right;
         this.margin_top = margin_top;
-        this.drawingAreaWidth = this.pageWidth - margin_left - margin_right;
-        this.drawingAreaHeight = this.pageHeight - margin_top - margin_bottom;
-        this.x_min = this.margin_left;
-        this.y_min = this.margin_top;
-        this.x_max = this.pageWidth - this.margin_right;
-        this.y_max = this.pageHeight - this.margin_bottom;
+        this.recalculateMarginBounds();
 
         this.screenWidth = screenWidth;
         this.canvasHeight = screenWidth / (pageWidth / pageHeight);
@@ -62,52 +56,82 @@ class GPlotter {
           // Add text input for feed rate
         createP("Feed Rate:").position(screenWidth + 15, 55);
         this.feedRateInput = createInput(this.feedRate.toString(), "number");
-        this.feedRateInput.position(screenWidth + 90, 70);
+        this.feedRateInput.position(screenWidth + 120, 70);
         this.feedRateInput.size(80);
         this.feedRateInput.input(() => this.updateFeedRate());
 
         // Add text input for cutting depth
         createP("Z Depth:").position(screenWidth + 15, 85);
         this.cuttingDepthInput = createInput(this.cuttingDepth.toString(), "number");
-        this.cuttingDepthInput.position(screenWidth + 90, 100);
+        this.cuttingDepthInput.position(screenWidth + 120, 100);
         this.cuttingDepthInput.size(80);
         this.cuttingDepthInput.input(() => this.updateCuttingDepth());
 
         // Add text input for fill gap
         createP("Fill Gap:").position(screenWidth + 15, 115);
         this.fillGapInput = createInput(this.fillGap.toString(), "number");
-        this.fillGapInput.position(screenWidth + 90, 130);
+        this.fillGapInput.position(screenWidth + 120, 130);
         this.fillGapInput.size(80);
         this.fillGapInput.input(() => this.updateFillGap());
 
+        // Add text inputs for margins (top/bottom/left/right)
+        createP("Margin Top:").position(screenWidth + 15, 145);
+        this.marginTopInput = createInput(this.margin_top.toString(), "number");
+        this.marginTopInput.position(screenWidth + 120, 160);
+        this.marginTopInput.size(80);
+        this.marginTopInput.input(() => this.updateMarginTop());
+
+        createP("Margin Bottom:").position(screenWidth + 15, 175);
+        this.marginBottomInput = createInput(this.margin_bottom.toString(), "number");
+        this.marginBottomInput.position(screenWidth + 120, 190);
+        this.marginBottomInput.size(80);
+        this.marginBottomInput.input(() => this.updateMarginBottom());
+
+        createP("Margin Left:").position(screenWidth + 15, 205);
+        this.marginLeftInput = createInput(this.margin_left.toString(), "number");
+        this.marginLeftInput.position(screenWidth + 120, 220);
+        this.marginLeftInput.size(80);
+        this.marginLeftInput.input(() => this.updateMarginLeft());
+
+        createP("Margin Right:").position(screenWidth + 15, 235);
+        this.marginRightInput = createInput(this.margin_right.toString(), "number");
+        this.marginRightInput.position(screenWidth + 120, 250);
+        this.marginRightInput.size(80);
+        this.marginRightInput.input(() => this.updateMarginRight());
+
+        // Create Save Settings button
+        this.saveSettingsButton = createButton('Save Settings');
+        this.saveSettingsButton.position(screenWidth + 15, 270);
+        this.saveSettingsButton.mousePressed(() => this.saveSettings());
+
          // Create Set New Zero button
          this.setZeroButton = createButton('Set New Zero');
-         this.setZeroButton.position(screenWidth + 15, 165);
+         this.setZeroButton.position(screenWidth + 15, 315);
          this.setZeroButton.mousePressed(() => this.setNewZero());
 
          // Create Return to Zero button
          this.returnZeroButton = createButton('Return to Zero');
-         this.returnZeroButton.position(screenWidth + 125, 165); // Adjust position as needed
+         this.returnZeroButton.position(screenWidth + 125, 315); // Adjust position as needed
          this.returnZeroButton.mousePressed(() => this.returnToZero());
 
          // Create a Draw Border Button
         this.drawBorderButton = createButton('Draw Border');
-        this.drawBorderButton.position(this.screenWidth + 15, 235);
+        this.drawBorderButton.position(this.screenWidth + 15, 385);
         this.drawBorderButton.mousePressed(() => this.drawBorder());
 
         // Create a Lift Pen Button
         this.liftPenButton = createButton('Lift Pen');
-        this.liftPenButton.position(this.screenWidth + 15, 305);
+        this.liftPenButton.position(this.screenWidth + 15, 455);
         this.liftPenButton.mousePressed(() => this.liftPen());
 
         // Lift and Drop Pen Button
         this.liftDropButton = createButton('Lift and Drop Pen');
-        this.liftDropButton.position(this.screenWidth+15, 270); // Adjust position if needed
+        this.liftDropButton.position(this.screenWidth+15, 420); // Adjust position if needed
         this.liftDropButton.mousePressed(() => this.LiftandDropPen());
 
         // Create Clear Queue button
         this.clearQueueButton = createButton('Clear Queue (Emergency Stop)');
-        this.clearQueueButton.position(screenWidth+15, 200);
+        this.clearQueueButton.position(screenWidth+15, 350);
         this.clearQueueButton.mousePressed(() => {
             this.queue = []; // clear the queue
             this.liftPen();
@@ -159,6 +183,10 @@ class GPlotter {
                 this.connectionStatusLabel.html('Not connected');
                 this.connectButton.html('Connect');
                 this.connectedPort = null;
+            });
+
+            this.socket.on('restoreSettings', (settings) => {
+                this.applySettings(settings);
             });
 
             // Fetch available ports from the server
@@ -294,6 +322,99 @@ class GPlotter {
         } else {
             this.fillGapInput.value(this.fillGap.toString()); // Reset invalid input
         }
+    }
+
+    updateMarginTop() {
+        const newValue = parseFloat(this.marginTopInput.value());
+        if (!isNaN(newValue) && newValue >= 0) {
+            this.margin_top = newValue;
+            this.recalculateMarginBounds();
+        } else {
+            this.marginTopInput.value(this.margin_top.toString()); // Reset invalid input
+        }
+    }
+
+    updateMarginBottom() {
+        const newValue = parseFloat(this.marginBottomInput.value());
+        if (!isNaN(newValue) && newValue >= 0) {
+            this.margin_bottom = newValue;
+            this.recalculateMarginBounds();
+        } else {
+            this.marginBottomInput.value(this.margin_bottom.toString()); // Reset invalid input
+        }
+    }
+
+    updateMarginLeft() {
+        const newValue = parseFloat(this.marginLeftInput.value());
+        if (!isNaN(newValue) && newValue >= 0) {
+            this.margin_left = newValue;
+            this.recalculateMarginBounds();
+        } else {
+            this.marginLeftInput.value(this.margin_left.toString()); // Reset invalid input
+        }
+    }
+
+    updateMarginRight() {
+        const newValue = parseFloat(this.marginRightInput.value());
+        if (!isNaN(newValue) && newValue >= 0) {
+            this.margin_right = newValue;
+            this.recalculateMarginBounds();
+        } else {
+            this.marginRightInput.value(this.margin_right.toString()); // Reset invalid input
+        }
+    }
+
+    // Sends the current feed rate, cutting depth, fill gap, and margins to the
+    // server to be persisted to settings.json.
+    saveSettings() {
+        const settings = {
+            feedRate: this.feedRate,
+            cuttingDepth: this.cuttingDepth,
+            fillGap: this.fillGap,
+            margin_top: this.margin_top,
+            margin_bottom: this.margin_bottom,
+            margin_left: this.margin_left,
+            margin_right: this.margin_right
+        };
+        this.socket.emit('saveSettings', settings);
+        console.log('Settings saved:', settings);
+    }
+
+    // Applies settings received from the server (on connect, via 'restoreSettings')
+    // to both the internal state and the corresponding UI inputs.
+    applySettings(settings) {
+        if (!settings) return;
+
+        if (settings.feedRate !== undefined) {
+            this.feedRate = settings.feedRate;
+            this.feedRateInput.value(this.feedRate.toString());
+        }
+        if (settings.cuttingDepth !== undefined) {
+            this.cuttingDepth = settings.cuttingDepth;
+            this.cuttingDepthInput.value(this.cuttingDepth.toString());
+        }
+        if (settings.fillGap !== undefined) {
+            this.fillGap = settings.fillGap;
+            this.fillGapInput.value(this.fillGap.toString());
+        }
+        if (settings.margin_top !== undefined) {
+            this.margin_top = settings.margin_top;
+            this.marginTopInput.value(this.margin_top.toString());
+        }
+        if (settings.margin_bottom !== undefined) {
+            this.margin_bottom = settings.margin_bottom;
+            this.marginBottomInput.value(this.margin_bottom.toString());
+        }
+        if (settings.margin_left !== undefined) {
+            this.margin_left = settings.margin_left;
+            this.marginLeftInput.value(this.margin_left.toString());
+        }
+        if (settings.margin_right !== undefined) {
+            this.margin_right = settings.margin_right;
+            this.marginRightInput.value(this.margin_right.toString());
+        }
+        this.recalculateMarginBounds();
+        console.log('Settings restored:', settings);
     }
 
     setNewZero() {
@@ -581,10 +702,10 @@ class GPlotter {
         });
 
         this.drawMarginBox();
+        this.drawMarginOutline();
     }
 
     drawMarginBox() {
-        //AK part of the margin work
         //Note - these "margins" simply cover parts of the drawing - they do not stop the drawing
         // margin_top/bottom/left/right and y_max are stored in mm, so convert to screen pixels
         // before drawing - otherwise this only looks correct when pixelToMMRatio happens to be 1.
@@ -600,8 +721,29 @@ class GPlotter {
         rect(0, 0, this.screenWidth, marginTopPx);
         //bottom rectangle margin
         rect(0, yMaxPx, this.screenWidth, marginBottomPx);
-        rect(0, 0, marginRightPx, this.canvasHeight);
-        rect(this.screenWidth - marginLeftPx, 0, marginLeftPx, this.canvasHeight);
+        rect(0, 0, marginLeftPx, this.canvasHeight);
+        rect(this.screenWidth - marginRightPx, 0, marginRightPx, this.canvasHeight);
+    }
+
+    // Draws a red, 1px outline around the current drawable area (i.e. the page
+    // inset by the margins), in the same screen-pixel space as drawMarginBox.
+    drawMarginOutline() {
+        let marginTopPx = this.margin_top / this.pixelToMMRatio;
+        let marginBottomPx = this.margin_bottom / this.pixelToMMRatio;
+        let marginLeftPx = this.margin_left / this.pixelToMMRatio;
+        let marginRightPx = this.margin_right / this.pixelToMMRatio;
+
+        let outlineX = marginLeftPx;
+        let outlineY = marginTopPx;
+        let outlineW = this.screenWidth - marginLeftPx - marginRightPx;
+        let outlineH = this.canvasHeight - marginTopPx - marginBottomPx;
+
+        push();
+        noFill();
+        stroke(255, 0, 0);
+        strokeWeight(1);
+        rect(outlineX, outlineY, outlineW, outlineH);
+        pop();
     }
 
     circle(x, y, d, fill) {
@@ -617,6 +759,17 @@ class GPlotter {
         let mmY = this.mapY(y);
         let mmD = d * this.pixelToMMRatio;
         this.circleToGCode(mmX, mmY, mmD, fill);
+    }
+
+    // Recomputes the drawable-area bounds from the current margin_top/bottom/left/right.
+    // Called once from the constructor and again whenever a margin UI input changes.
+    recalculateMarginBounds() {
+        this.drawingAreaWidth = this.pageWidth - this.margin_left - this.margin_right;
+        this.drawingAreaHeight = this.pageHeight - this.margin_top - this.margin_bottom;
+        this.x_min = this.margin_left;
+        this.y_min = this.margin_top;
+        this.x_max = this.pageWidth - this.margin_right;
+        this.y_max = this.pageHeight - this.margin_bottom;
     }
 
     canDraw(x = this.marginLeft, y = this.marginTop) {

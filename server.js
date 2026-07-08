@@ -4,6 +4,7 @@ const app = express();
 const server = require('http').Server(app);
 const io = require('socket.io')(server);
 const path = require('path');
+const fs = require('fs');
 
 // =======================
 // SETUP
@@ -11,6 +12,7 @@ const path = require('path');
 const port = 3000;
 const portList = [];
 let serialPort;
+const settingsPath = path.join(__dirname, 'settings.json');
 
 // =======================
 // SERVER START
@@ -50,6 +52,31 @@ io.on('connection', (socket) => {
   console.log('User connected');
 
   socket.emit('portList', portList);
+
+  fs.readFile(settingsPath, 'utf8', (err, data) => {
+    if (err) {
+      if (err.code !== 'ENOENT') {
+        console.error('Error reading settings.json:', err.message);
+      }
+      return;
+    }
+    try {
+      const settings = JSON.parse(data);
+      socket.emit('restoreSettings', settings);
+    } catch (parseErr) {
+      console.error('Error parsing settings.json:', parseErr.message);
+    }
+  });
+
+  socket.on('saveSettings', (settings) => {
+    fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), (err) => {
+      if (err) {
+        console.error('Error saving settings.json:', err.message);
+      } else {
+        console.log('Settings saved to settings.json');
+      }
+    });
+  });
 
   socket.on('gCodeOutput', (data) => {
     if (serialPort && serialPort.isOpen) {
