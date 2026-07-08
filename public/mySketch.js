@@ -63,20 +63,6 @@ function mousePressed() {
   if (mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
     if (plotter.demoMode) {
       plotter.handleDemoMousePressed(mouseX, mouseY);
-      return;
-    }
-    if (key === "t") {
-      plotter.drawString(myString, mouseX, mouseY, 0.5);
-    } else if (key === "c") {
-      plotter.circle(mouseX, mouseY, 50, false);
-    } else if (key === "r") {
-      plotter.rectangle(mouseX, mouseY, 50, 50);
-    } else if (key === "a") {
-      let randomStart = random(2 * PI);
-      let randomStop = random(2 * PI);
-      plotter.arc(mouseX, mouseY, 50, 50, randomStart, randomStop, 0);
-    } else if (key === "e") {
-      plotter.ellipse(mouseX, mouseY, 50, 25);
     }
   }
 }
