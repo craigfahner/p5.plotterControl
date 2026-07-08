@@ -1,11 +1,9 @@
 const { SerialPort } = require('serialport');
-const NodeWebcam = require('node-webcam');
 const express = require('express');
 const app = express();
 const server = require('http').Server(app);
 const io = require('socket.io')(server);
 const path = require('path');
-const fs = require('fs');
 
 // =======================
 // SETUP
@@ -13,40 +11,6 @@ const fs = require('fs');
 const port = 3000;
 const portList = [];
 let serialPort;
-let Webcam;
-
-// Setup image storage folder
-const imagesDir = path.join(__dirname, 'images');
-if (!fs.existsSync(imagesDir)) {
-  fs.mkdirSync(imagesDir);
-}
-
-// =======================
-// CAMERA SETUP
-// =======================
-NodeWebcam.list((cameras) => {
-  const cleanedCameras = cameras.map(cam => cam.replace(/^=>\s*/, '').trim());
-  const deviceName = cleanedCameras.find(c => c.includes('Logitech')) || cleanedCameras[0];
-
-  if (!deviceName) {
-    console.error('No webcam found');
-    return;
-  }
-
-  Webcam = NodeWebcam.create({
-    width: 1920,
-    height: 1080,
-    quality: 100,
-    saveShots: true,
-    output: 'jpeg',
-    device: deviceName,
-    callbackReturn: 'location',
-    verbose: true,
-    delay: 0.2
-  });
-
-  console.log('Webcam ready:', deviceName);
-});
 
 // =======================
 // SERVER START
@@ -58,7 +22,6 @@ server.listen(port, () => {
 // Serve static files
 //app.use(express.static('public'));  // this may be causing windows errors
 app.use('/', express.static(path.join(__dirname, 'public')));
-app.use('/images', express.static(imagesDir));
 
 // Serve main page
 app.get('/', (req, res) => {
@@ -87,38 +50,6 @@ io.on('connection', (socket) => {
   console.log('User connected');
 
   socket.emit('portList', portList);
-
-  if (Webcam) {
-    socket.emit('webcam-selected', 'Webcam ready');
-  }
-
-  socket.on('get-webcams', () => {
-    NodeWebcam.list((cameras) => {
-      const cleanedCameras = cameras.map(cam => cam.replace(/^=>\s*/, '').trim());
-      socket.emit('webcam-list', cleanedCameras);
-    });
-  });
-
-  socket.on('capture-image', () => {
-    if (!Webcam) {
-      console.error('Webcam not set yet');
-      socket.emit('capture-error', 'Webcam not set yet.');
-      return;
-    }
-
-    const fileName = `image_${Date.now()}.jpg`;
-    const filePath = path.join(imagesDir, fileName);
-
-    Webcam.capture(filePath, (err) => {
-      if (err) {
-        console.error('Capture error:', err);
-        socket.emit('capture-error', err.message);
-      } else {
-        console.log('Image captured:', fileName);
-        socket.emit('capture-success', fileName);
-      }
-    });
-  });
 
   socket.on('gCodeOutput', (data) => {
     if (serialPort && serialPort.isOpen) {
