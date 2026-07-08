@@ -38,27 +38,6 @@ function draw() {
   plotter.display(); // Display drawn shapes
 }
 
-// function keyPressed(){
-//   if(key==="c"){
-//     plotter.drawString("Hello", 50,500, 0.5);
-//   } else if(key==="e"){
-//     plotter.circle(350,350,50,false);
-//   } else if(key==="t"){
-//     plotter.drawString(String(pos), 10+(pos+10),475, 0.5);
-//     pos++;
-//   } else if(key==="q"){
-//     plotter.sendStatusQuery();
-//   }
-
-//   if(key==="c"){
-//     currentShape="c";
-//   } else if(key ==="r"){
-//     currentShape="r";
-//   } else if(key === "a"){
-//     currentShape="a";
-//   }
-// }
-
 function mousePressed() {
   if (mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
     if (plotter.demoMode) {
