@@ -204,9 +204,8 @@ These functions allow you to create a variety of shapes on the canvas and genera
 ## On-Screen UI
 
 ### Port Management Controls
-- **Port Dropdown Menu**: Updates ports with `updatePortsDropdown()`.
-- **Connect Button**: Connects/disconnects using `toggleConnection()`.
-- **Connection Status Label**: Displays current status.
+- **Connect Button**: Connects/disconnects using `toggleConnection()`. Connecting opens the browser's native Web Serial device picker (`navigator.serial.requestPort()`) - there's no in-page port dropdown.
+- **Connection Status Label**: Displays "Connected to plotter" / "Not connected to plotter".
 
 ### Plotter Controls
 - **Enable Plotting Checkbox**: Toggles plotter with `toggleEnabled()`.
@@ -231,26 +230,20 @@ These functions allow you to create a variety of shapes on the canvas and genera
 
 ## Function Reference
 
-### `updatePortsDropdown(ports)`
-Updates the dropdown list with available serial ports.
-
 ### `toggleEnabled()`
 Enables/disables plotter functionality.
 
 ### `toggleConnection()`
-Toggles connection to the selected port.
+Toggles the Web Serial connection.
 
 ### `connectToPort()`
-Connects to selected port.
+Opens the browser's native device picker and connects to the chosen serial port.
 
 ### `disconnectFromPort()`
-Disconnects from current port.
-
-### `fetchPorts()`
-Fetches port list from server.
+Disconnects from the current serial port.
 
 ### `onMessage(data)`
-Handles messages from server.
+Handles a line of data read from the serial port.
 
 ### `updateFeedRate()`
 Updates G-code feed rate.
