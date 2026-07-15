@@ -812,29 +812,30 @@ class GPlotter {
     }
 
     drawBorder() {
-        const maxX = this.drawingAreaWidth;
-        const maxY = this.drawingAreaHeight;
-
         console.log("Drawing border...");
-        this.socket.emit("gCodeOutput", "G00 Z0\n");
 
-        if (this.enabled) {
-            // FIRST: lift and move to (0,0)
-            this.queue.push(`G00 Z0 F${this.feedRate} ; Lift pen`);
-            this.queue.push(`G00 X${this.x_min.toFixed(3)} Y${this.y_min.toFixed(3)} F${this.feedRate} ; Rapid move to top-left`);
-            // SECOND: drop the pen down BEFORE drawing
-            this.queue.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool to start drawing border`);
+        // x_min/x_max/y_min/y_max are the margin-derived drawable-area bounds in
+        // "natural" (always-positive) mm space. X is never flipped (see mapX), but
+        // Y needs the same sign applied that every drawn shape's Y already gets via
+        // mapY, or the border's Y coordinates won't match the orientation the
+        // machine is actually zeroed for when matchInkscapeOrientation is on.
+        const yMin = this.mapYSign() * this.y_min;
+        const yMax = this.mapYSign() * this.y_max;
 
-            // Now DRAW manually by G1 moves, instead of using this.line()
-            this.queue.push(`G01 X${this.x_max.toFixed(3)} Y${this.y_min.toFixed(3)} F${this.feedRate} ; Top edge`);
-            this.queue.push(`G01 X${this.x_max.toFixed(3)} Y${this.y_max.toFixed(3)} F${this.feedRate} ; Right edge`);
-            this.queue.push(`G01 X${this.x_min.toFixed(3)} Y${this.y_max.toFixed(3)} F${this.feedRate} ; Bottom edge`);
-            this.queue.push(`G01 X${this.x_min.toFixed(3)} Y${this.y_min.toFixed(3)} F${this.feedRate} ; Left edge, close`);
+        const gcode = [
+            "G90 ; Absolute positioning",
+            `G00 Z0 F${this.feedRate} ; Lift pen`,
+            `G00 X${this.x_min.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Rapid move to top-left`,
+            `G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool to start drawing border`,
+            `G01 X${this.x_max.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Top edge`,
+            `G01 X${this.x_max.toFixed(3)} Y${yMax.toFixed(3)} F${this.feedRate} ; Right edge`,
+            `G01 X${this.x_min.toFixed(3)} Y${yMax.toFixed(3)} F${this.feedRate} ; Bottom edge`,
+            `G01 X${this.x_min.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Left edge, close`,
+            `G00 Z0 F${this.feedRate} ; Lift pen after border`,
+            "G00 X0 Y0 Z0 ; Return to zero"
+        ];
 
-            // Finally lift pen and return home
-            this.queue.push(`G00 Z0 F${this.feedRate} ; Lift pen after border`);
-            this.queue.push("G00 X0 Y0 Z0 ; Return to zero");
-        }
+        this.queueGCode(gcode);
     }
 
     liftPen() {
