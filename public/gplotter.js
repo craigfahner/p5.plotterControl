@@ -83,6 +83,12 @@ class GPlotter {
         this.marginTopInput.size(80);
         this.marginTopInput.input(() => this.updateMarginTop());
 
+        // Shows the drawable interior area (page minus margins); kept up to date by
+        // recalculateMarginBounds(), which runs whenever any margin changes.
+        this.interiorDimensionsLabel = createP('');
+        this.interiorDimensionsLabel.position(screenWidth + 220, 160);
+        this.updateInteriorDimensionsLabel();
+
         createP("Margin Bottom:").position(screenWidth + 15, 175);
         this.marginBottomInput = createInput(this.margin_bottom.toString(), "number");
         this.marginBottomInput.position(screenWidth + 120, 190);
@@ -1142,6 +1148,17 @@ class GPlotter {
         this.y_min = this.margin_top;
         this.x_max = this.pageWidth - this.margin_right;
         this.y_max = this.pageHeight - this.margin_bottom;
+        // The label doesn't exist yet on the very first call (made before the UI is
+        // built), so this is guarded rather than called unconditionally.
+        this.updateInteriorDimensionsLabel();
+    }
+
+    // Updates the "Interior dimensions" label to reflect the current drawable area.
+    updateInteriorDimensionsLabel() {
+        if (!this.interiorDimensionsLabel) return;
+        this.interiorDimensionsLabel.html(
+            `Interior dimensions: ${this.drawingAreaWidth.toFixed(1)}mm x ${this.drawingAreaHeight.toFixed(1)}mm`
+        );
     }
 
     canDraw(x = this.marginLeft, y = this.marginTop) {
