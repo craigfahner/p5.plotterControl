@@ -328,9 +328,14 @@ class GPlotter {
     }
 
     // Converts a p5.js pixel X coordinate to a plotter X coordinate in mm.
-    // X is never flipped/mirrored - matchInkscapeOrientation only affects Y.
+    // When matchInkscapeOrientation is on, X is shifted (not mirrored/flipped) so
+    // zero lands at the top-right corner instead of top-left: mapX(screenWidth) = 0,
+    // mapX(0) = -pageWidth. This is a pure translation (the slope stays positive),
+    // so the image orientation is unaffected - only which corner is "zero" moves.
     mapX(xPixel) {
-        return xPixel * this.pixelToMMRatio;
+        return this.matchInkscapeOrientation
+            ? xPixel * this.pixelToMMRatio - this.pageWidth
+            : xPixel * this.pixelToMMRatio;
     }
 
     // Converts a p5.js pixel Y coordinate to a plotter Y coordinate in mm.
@@ -352,6 +357,15 @@ class GPlotter {
     // but a partial arc does show it, as a flipped opening direction.
     mapYSign() {
         return this.matchInkscapeOrientation ? -1 : 1;
+    }
+
+    // mapX is affine (scale then shift by -pageWidth), not a pure linear/sign
+    // flip - so code that already has a value in mm (not pixels), like
+    // drawBorder()'s x_min/x_max or canDraw()'s margin bounds, needs just this
+    // shift added to land in the same coordinate space mapX() produces, without
+    // re-applying the pixelToMMRatio scaling a second time.
+    mapXOffset() {
+        return this.matchInkscapeOrientation ? -this.pageWidth : 0;
     }
 
     updatePortsDropdown(ports) {
@@ -821,22 +835,25 @@ class GPlotter {
         console.log("Drawing border...");
 
         // x_min/x_max/y_min/y_max are the margin-derived drawable-area bounds in
-        // "natural" (always-positive) mm space. X is never flipped (see mapX), but
-        // Y needs the same sign applied that every drawn shape's Y already gets via
-        // mapY, or the border's Y coordinates won't match the orientation the
-        // machine is actually zeroed for when matchInkscapeOrientation is on.
+        // "natural" (always-positive) mm space. Both need the same corrections
+        // every drawn shape's coordinates already get via mapX/mapY, or the
+        // border won't match the orientation/zero-corner the machine is actually
+        // set up for when matchInkscapeOrientation is on.
+        const xShift = this.mapXOffset();
+        const xMin = this.x_min + xShift;
+        const xMax = this.x_max + xShift;
         const yMin = this.mapYSign() * this.y_min;
         const yMax = this.mapYSign() * this.y_max;
 
         const gcode = [
             "G90 ; Absolute positioning",
             `G00 Z0 F${this.feedRate} ; Lift pen`,
-            `G00 X${this.x_min.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Rapid move to top-left`,
+            `G00 X${xMin.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Rapid move to top-left`,
             `G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool to start drawing border`,
-            `G01 X${this.x_max.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Top edge`,
-            `G01 X${this.x_max.toFixed(3)} Y${yMax.toFixed(3)} F${this.feedRate} ; Right edge`,
-            `G01 X${this.x_min.toFixed(3)} Y${yMax.toFixed(3)} F${this.feedRate} ; Bottom edge`,
-            `G01 X${this.x_min.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Left edge, close`,
+            `G01 X${xMax.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Top edge`,
+            `G01 X${xMax.toFixed(3)} Y${yMax.toFixed(3)} F${this.feedRate} ; Right edge`,
+            `G01 X${xMin.toFixed(3)} Y${yMax.toFixed(3)} F${this.feedRate} ; Bottom edge`,
+            `G01 X${xMin.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Left edge, close`,
             `G00 Z0 F${this.feedRate} ; Lift pen after border`,
             "G00 X0 Y0 Z0 ; Return to zero"
         ];
@@ -1163,13 +1180,15 @@ class GPlotter {
 
     canDraw(x = this.marginLeft, y = this.marginTop) {
         //check if x or y are outside the margins
-        // X's valid range is the same regardless of orientation (mirroring reflects
-        // within [0, pageWidth], it doesn't change the range). Y's valid range flips
-        // sign when matchInkscapeOrientation negates Y (see mapY).
+        // Both bounds need the same corrections mapX/mapY apply to drawn
+        // coordinates: X shifts by mapXOffset() (see mapX), Y flips sign by
+        // mapYSign() (see mapY), when matchInkscapeOrientation is on.
+        let xShift = this.mapXOffset();
+        let xMin = this.margin_left + xShift;
+        let xMax = (this.pageWidth - this.margin_right) + xShift;
         let yMin = this.matchInkscapeOrientation ? -(this.pageHeight - this.margin_bottom) : this.margin_top;
         let yMax = this.matchInkscapeOrientation ? -this.margin_top : this.pageHeight - this.margin_bottom;
-        if (x <= this.margin_left || x >= this.pageWidth - this.margin_right ||
-            y <= yMin || y >= yMax)
+        if (x <= xMin || x >= xMax || y <= yMin || y >= yMax)
             return false;
         else return true;
     }
