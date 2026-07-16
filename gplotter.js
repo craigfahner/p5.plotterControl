@@ -1,5 +1,5 @@
 class GPlotter {
-    constructor(pageWidth, pageHeight, screenWidth, enabled, margin_left = 0, margin_bottom = 0, margin_right = 0, margin_top = 0) {
+    constructor(pageWidth, pageHeight, screenWidth, enabled = false, margin_left = 0, margin_bottom = 0, margin_right = 0, margin_top = 0) {
         this.queue = []; // array to store gcode instructions
         this.feedRate = 3000;
         this.cuttingDepth = 6.25;
@@ -61,6 +61,16 @@ class GPlotter {
                     this.handlePortDisconnected();
                 }
             });
+
+            // Every (re)connect redefines zero to wherever the pen physically is
+            // (see connectToPort()) - so if the page is refreshed or closed while
+            // the pen is mid-drawing, the next connection's zero silently shifts to
+            // that spot. Sending the pen back to true zero here, before the
+            // connection is lost, keeps zero consistent across a refresh. Both
+            // events are registered since browsers don't fire these two
+            // identically - this is redundant by design, not a bug.
+            window.addEventListener('beforeunload', () => this.returnToZeroOnUnload());
+            window.addEventListener('pagehide', () => this.returnToZeroOnUnload());
         } else {
             this.enabled = false;
         }
@@ -289,9 +299,14 @@ class GPlotter {
     }
 
     // Converts a p5.js pixel X coordinate to a plotter X coordinate in mm.
-    // X is never flipped/mirrored - matchInkscapeOrientation only affects Y.
+    // When matchInkscapeOrientation is on, X is shifted (not mirrored/flipped) so
+    // zero lands at the top-right corner instead of top-left: mapX(screenWidth) = 0,
+    // mapX(0) = -pageWidth. This is a pure translation (the slope stays positive),
+    // so the image orientation is unaffected - only which corner is "zero" moves.
     mapX(xPixel) {
-        return xPixel * this.pixelToMMRatio;
+        return this.matchInkscapeOrientation
+            ? xPixel * this.pixelToMMRatio - this.pageWidth
+            : xPixel * this.pixelToMMRatio;
     }
 
     // Converts a p5.js pixel Y coordinate to a plotter Y coordinate in mm.
@@ -315,26 +330,30 @@ class GPlotter {
         return this.matchInkscapeOrientation ? -1 : 1;
     }
 
+    // mapX is affine (scale then shift by -pageWidth), not a pure linear/sign
+    // flip - so code that already has a value in mm (not pixels), like
+    // drawBorder()'s x_min/x_max or canDraw()'s margin bounds, needs just this
+    // shift added to land in the same coordinate space mapX() produces, without
+    // re-applying the pixelToMMRatio scaling a second time.
+    mapXOffset() {
+        return this.matchInkscapeOrientation ? -this.pageWidth : 0;
+    }
+
+    // Pauses/resumes sending G-code. This is purely a pause/resume toggle - it
+    // never touches the zero reference. Zero is only ever (re)established by a
+    // fresh connect (see connectToPort()) or by explicitly clicking "Set New
+    // Zero" - toggling plotting off and back on (including via Emergency Stop)
+    // must never silently redefine it to wherever the pen happens to be sitting.
     toggleEnabled() {
         let checkbox = select("#enabled");
         if (checkbox.checked() === true) {
             if (this.connectedPort) {
                 this.enabled = true;
-                const gcode = "G92 X0 Y0 Z0 ;";
-                this.queue.push(gcode);
-                this.writeToSerial(gcode + "\n");
             } else {
                 checkbox.checked(false);
                 console.log("cannot enable plotter functions");
             }
         } else {
-            // Re-enabling later sends G92 X0 Y0 Z0, which redefines wherever the pen
-            // currently is as the new zero - so if we don't return to the true zero
-            // before disabling, re-enabling mid-drawing silently shifts the origin
-            // to wherever the pen happened to be sitting when disabled.
-            if (this.enabled) {
-                this.returnToZero();
-            }
             this.enabled = false;
             checkbox.checked(false);
         }
@@ -890,26 +909,42 @@ class GPlotter {
         }
     }
 
+    // Best-effort: sends the pen straight back to true zero, bypassing the
+    // ack-gated queue entirely (a single raw write, same idea as
+    // disconnectFromPort()'s cleanup send), for use from beforeunload/pagehide.
+    // The normal queue relies on waiting for real "ok" responses between each
+    // line - multiple serial round-trips that won't complete in time once a page
+    // has started unloading. This is NOT guaranteed to reach the plotter: browsers
+    // don't promise that a pending write finishes once unload begins, so this is
+    // the best available mitigation, not a hard guarantee.
+    returnToZeroOnUnload() {
+        if (!this.enabled || !this.serialWriter) return;
+        this.writeToSerial(`G00 Z0 F${this.feedRate}\nG00 X0 Y0 F${this.feedRate}\n`);
+    }
+
     drawBorder() {
         console.log("Drawing border...");
 
         // x_min/x_max/y_min/y_max are the margin-derived drawable-area bounds in
-        // "natural" (always-positive) mm space. X is never flipped (see mapX), but
-        // Y needs the same sign applied that every drawn shape's Y already gets via
-        // mapY, or the border's Y coordinates won't match the orientation the
-        // machine is actually zeroed for when matchInkscapeOrientation is on.
+        // "natural" (always-positive) mm space. Both need the same corrections
+        // every drawn shape's coordinates already get via mapX/mapY, or the
+        // border won't match the orientation/zero-corner the machine is actually
+        // set up for when matchInkscapeOrientation is on.
+        const xShift = this.mapXOffset();
+        const xMin = this.x_min + xShift;
+        const xMax = this.x_max + xShift;
         const yMin = this.mapYSign() * this.y_min;
         const yMax = this.mapYSign() * this.y_max;
 
         const gcode = [
             "G90 ; Absolute positioning",
             `G00 Z0 F${this.feedRate} ; Lift pen`,
-            `G00 X${this.x_min.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Rapid move to top-left`,
+            `G00 X${xMin.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Rapid move to top-left`,
             `G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool to start drawing border`,
-            `G01 X${this.x_max.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Top edge`,
-            `G01 X${this.x_max.toFixed(3)} Y${yMax.toFixed(3)} F${this.feedRate} ; Right edge`,
-            `G01 X${this.x_min.toFixed(3)} Y${yMax.toFixed(3)} F${this.feedRate} ; Bottom edge`,
-            `G01 X${this.x_min.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Left edge, close`,
+            `G01 X${xMax.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Top edge`,
+            `G01 X${xMax.toFixed(3)} Y${yMax.toFixed(3)} F${this.feedRate} ; Right edge`,
+            `G01 X${xMin.toFixed(3)} Y${yMax.toFixed(3)} F${this.feedRate} ; Bottom edge`,
+            `G01 X${xMin.toFixed(3)} Y${yMin.toFixed(3)} F${this.feedRate} ; Left edge, close`,
             `G00 Z0 F${this.feedRate} ; Lift pen after border`,
             "G00 X0 Y0 Z0 ; Return to zero"
         ];
@@ -1236,13 +1271,15 @@ class GPlotter {
 
     canDraw(x = this.marginLeft, y = this.marginTop) {
         //check if x or y are outside the margins
-        // X's valid range is the same regardless of orientation (mirroring reflects
-        // within [0, pageWidth], it doesn't change the range). Y's valid range flips
-        // sign when matchInkscapeOrientation negates Y (see mapY).
+        // Both bounds need the same corrections mapX/mapY apply to drawn
+        // coordinates: X shifts by mapXOffset() (see mapX), Y flips sign by
+        // mapYSign() (see mapY), when matchInkscapeOrientation is on.
+        let xShift = this.mapXOffset();
+        let xMin = this.margin_left + xShift;
+        let xMax = (this.pageWidth - this.margin_right) + xShift;
         let yMin = this.matchInkscapeOrientation ? -(this.pageHeight - this.margin_bottom) : this.margin_top;
         let yMax = this.matchInkscapeOrientation ? -this.margin_top : this.pageHeight - this.margin_bottom;
-        if (x <= this.margin_left || x >= this.pageWidth - this.margin_right ||
-            y <= yMin || y >= yMax)
+        if (x <= xMin || x >= xMax || y <= yMin || y >= yMax)
             return false;
         else return true;
     }
@@ -1828,7 +1865,7 @@ class GPlotter {
 
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
 
-        // Generate fill lines with rotation
+        // Generate fill lines with rotation, clipping each line against the margins
         if (fill) {
             for (let yy = y - r_h; yy <= y + r_h; yy += this.fillGap) {
                 let xOffset = r_w * Math.sqrt(1 - Math.pow((yy - y) / r_h, 2));
@@ -1840,9 +1877,22 @@ class GPlotter {
                     let rotatedStartFill = this.applyRotation(x1, yy, x, y, angle);
                     let rotatedEndFill = this.applyRotation(x2, yy, x, y, angle);
 
-                    gcode.push(`G00 X${rotatedStartFill.x.toFixed(3)} Y${rotatedStartFill.y.toFixed(3)} ; Move to fill start`);
+                    let fx1 = rotatedStartFill.x, fy1 = rotatedStartFill.y;
+                    let fx2 = rotatedEndFill.x, fy2 = rotatedEndFill.y;
+                    if (!this.canDraw(fx1, fy1) || !this.canDraw(fx2, fy2)) {
+                        let pointArray = this.interpolateLine(fx1, fy1, fx2, fy2);
+                        fx1 = pointArray[0];
+                        fy1 = pointArray[1];
+                        fx2 = pointArray[2];
+                        fy2 = pointArray[3];
+                        if (fx1 === undefined || fy1 === undefined || fx2 === undefined || fy2 === undefined) {
+                            continue; // entire fill line is outside the drawable area
+                        }
+                    }
+
+                    gcode.push(`G00 X${fx1.toFixed(3)} Y${fy1.toFixed(3)} ; Move to fill start`);
                     gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for filling`);
-                    gcode.push(`G01 X${rotatedEndFill.x.toFixed(3)} Y${rotatedEndFill.y.toFixed(3)} F${this.feedRate} ; Fill line`);
+                    gcode.push(`G01 X${fx2.toFixed(3)} Y${fy2.toFixed(3)} F${this.feedRate} ; Fill line`);
                     gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after fill line`);
                 }
             }
