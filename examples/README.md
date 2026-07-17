@@ -3,4 +3,4 @@
 
 ## Example 1: timed events using setInterval()
 
-[Link to code](/timer1/mySketch.js) | Launch sketch in browser
+[Link to code](/examples/timer1/mySketch.js) | Launch sketch in browser
