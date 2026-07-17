@@ -1,5 +1,6 @@
 
-# p5 plotter control
+# p5-plotter-control
+## a real-time pen plotter control library for p5.js
 
 This is a p5.js library that allows for real-time control of GRBL-controllable pen plotters like those manufactured by iDraw / uunatek. With this library, you can control the pen plotter using p5.js-style shape functions. It is ideal for applications where you want to achieve direct, live control of the pen plotter, instead of plotting a finished file all at once as you might with other p5 libraries like [p5.plotSVG](https://github.com/golanlevin/p5.plotSvg). Please see the separate SVGtoiDraw.md document for details on the workflow for exporting vector files for plotting from Inkscape to iDraw plotters.
 
@@ -14,6 +15,8 @@ The library consists of three components:
 ## Plotter Configuration
 
 Before connecting, position the pen carriage in the "top right" corner of the page – the same corner used by the iDraw Inkscape plugin. Connecting to the plotter (see the Connect button, below) automatically sets this position as the machine's zero point – there's no separate zeroing step.
+
+![Zero position](assets/zero.png)
 
 ## Class Initialization
 
@@ -148,7 +151,7 @@ Finishes recording the custom shape and optionally closes and fills it.
 
 ## 8. `plotter.drawString(text, x, y, scale)`
 
-Draws a string of vector text using a built-in Hershey-style font ("futural"), starting at the given position.
+Draws a string of vector text using a built-in Hershey-style font ("futural"), starting at the given position. Uses [Hershey Text functions by Allison Parrish](https://editor.p5js.org/allison.parrish/sketches/SJv2DCYpQ) as implemented by [Golan Levin](https://github.com/golanlevin/p5-single-line-font-resources/blob/main/Hershey/Hershey_inline_font/sketch.js)
 
 **Parameters:**
 - `text` (`String`): The text content to draw (e.g., `"Hello World!"`).
@@ -160,6 +163,35 @@ Draws a string of vector text using a built-in Hershey-style font ("futural"), s
 
 ```js
 plotter.drawString("Hello Plotter!", 50, 200, 0.5);
+```
+
+## 9. Free Draw Functions
+
+Draws a continuous, arbitrary-length stroke by feeding a start point, a stream of points, and an end call – useful for click-and-drag or mouse-tracked drawing, where the full path isn't known in advance. Unlike the other shape functions, the pen stays down between calls, so the whole path is drawn as one continuous line rather than separate segments. If the path goes outside the plottable area (defined by the margins), the pen automatically lifts, and lowers again if the path re-enters.
+
+### `plotter.startFreeDraw(x, y)`
+Lowers the pen at `(x, y)` and begins a new free-draw stroke.
+
+### `plotter.freeDrawTo(x, y)`
+Draws a continuous line segment from the last free-draw point to `(x, y)`. Has no effect if `startFreeDraw()` hasn't been called (or if `endFreeDraw()` already ended the stroke).
+
+### `plotter.endFreeDraw()`
+Ends the current free-draw stroke and lifts the pen.
+
+**Example:**
+
+```js
+function mousePressed() {
+  plotter.startFreeDraw(mouseX, mouseY);
+}
+
+function mouseDragged() {
+  plotter.freeDrawTo(mouseX, mouseY);
+}
+
+function mouseReleased() {
+  plotter.endFreeDraw();
+}
 ```
 
 ---
@@ -199,7 +231,7 @@ plotter.endShape(CLOSE, true);
 - **Connection Status Label**: Displays whether the plotter is currently connected (e.g. "Connected to plotter" / "Not connected to plotter").
 
 ### Plotter Controls
-- **Enable Plotting Checkbox**: If this is checked, drawn shapes will be sent to the pen plotter. Disable this if you want to test your drawing without sending instructions to the plotter. 
+- **Enable Plotting Checkbox**: If this is checked, drawn shapes will be sent to the pen plotter. Disable this if you want to test your drawing without sending instructions to the plotter. You can set the plotter to be disabled by default in the GPlotter constructor – `plotter = new GPlotter(210,297,500,false);` – in this case, `false` disables plotting until you manually enable plotting in the UI.
 - **Clear Queue Button (Emergency Stop)**: If something is malfunctioning (for instance, if the plotter is running out of bounds due to an error), you can use this emergency stop button to prevent any further instructions from being sent to the plotter.
 - **Lift Pen Button**: Lifts pen manually.
 - **Lift and Drop Pen Button**: Lifts and then drops the pen. Can be useful for calibrating the physical pen positioning and the Z depth.
@@ -208,7 +240,7 @@ plotter.endShape(CLOSE, true);
 ### Parameter Controls
 - **Feed Rate Input**: Sets plotting speed. Default 3000 mm/minute.
 - **Cutting Depth Input**: Sets Z depth (how far the pen moves downwards)
-- **Fill Gap Input**: Sets the line spacing for shapes that have fill enabled.
+- **Fill Gap Input**: Sets the line spacing for shapes that have fill enabled. If you want solid fills, this should be set to the diameter of your drawing medium or pen tip, in mm.
 
 ### Margin Controls
 - **Margin Top / Bottom / Left / Right Inputs**: Set page margins (in mm).
@@ -335,3 +367,12 @@ Converts a single glyph's Hershey path string into a list of drawing commands, o
 
 ### `drawPath(cmds, x, y, sca)`
 Draws a list of vector path commands (as produced by `getPathCommandsForText`), lifting the pen between separate strokes.
+
+### `startFreeDraw(x, y)`
+Lowers the pen and begins a new free-draw stroke at `(x, y)`.
+
+### `freeDrawTo(x, y)`
+Draws a continuous line segment from the last free-draw point to `(x, y)`, keeping the pen down.
+
+### `endFreeDraw()`
+Ends the current free-draw stroke and lifts the pen.

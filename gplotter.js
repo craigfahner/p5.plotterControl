@@ -1,10 +1,26 @@
 class GPlotter {
-    constructor(pageWidth, pageHeight, screenWidth, enabled = false, margin_left = 0, margin_bottom = 0, margin_right = 0, margin_top = 0) {
+    constructor(pageWidth, pageHeight, screenWidth, enabled = true, margin_left = 0, margin_bottom = 0, margin_right = 0, margin_top = 0) {
         this.queue = []; // array to store gcode instructions
         this.feedRate = 3000;
         this.cuttingDepth = 6.25;
         this.drawnShapes = []; // array to store shapes drawn to canvas
-        this.enabled = enabled; // option to not send gcode values via the serial port
+
+        // `enabled` is the constructor's stated preference for whether plotting
+        // should turn on automatically once a connection's boot-recovery zero is
+        // established (see connectToPort()) - it is NOT the live runtime state.
+        // this.enabled always starts false and only ever becomes true after an
+        // actual connection completes (either automatically here, or manually via
+        // the checkbox/toggleEnabled()). Only ever honored on the FIRST connect of
+        // the session, though - see hasDisconnectedOnce below.
+        this.autoEnableOnConnect = enabled;
+        this.enabled = false;
+
+        // Set true by disconnectFromPort()/handlePortDisconnected(). Once a
+        // session has disconnected at least once, connectToPort() will no longer
+        // auto-enable plotting on a subsequent reconnect even if
+        // autoEnableOnConnect is true - re-enabling after any disconnect always
+        // requires an explicit, manual checkbox check from then on.
+        this.hasDisconnectedOnce = false;
         this.pageWidth = pageWidth;
         this.pageHeight = pageHeight;
 
@@ -44,6 +60,15 @@ class GPlotter {
         this.serialWritableClosed = null;
         this.serialReadBuffer = '';
         this.connectedPort = null; // truthy once connected, matches prior checks elsewhere
+
+        // Separate from `enabled`: `enabled` means "the user wants plotting on";
+        // `zeroEstablished` means "the boot-recovery G92 has actually been sent, so
+        // zero is safe to trust." queueGCode() requires both. Keeping these as two
+        // flags (rather than folding this into `enabled`) means nothing - not
+        // connectToPort()'s own auto-enable, not toggleEnabled()'s manual checkbox
+        // path, not any future caller - can let G-code through early just by setting
+        // `enabled` true; only the boot-recovery step itself can clear this gate.
+        this.zeroEstablished = false;
 
         // Create a connect button
         this.connectButton = createButton("Connect");
@@ -94,6 +119,12 @@ class GPlotter {
         this.fillGapInput = createInput(this.fillGap.toString(), "number");
         this.fillGapInput.position(screenWidth + 120, 130);
         this.fillGapInput.size(80);
+        // Without an explicit step, a number input defaults to step="1", which
+        // makes the spinner arrows (and some browsers' native validation) treat
+        // sub-1 decimals as invalid. 0.1 matches the minimum fill gap enforced
+        // below in updateFillGap().
+        this.fillGapInput.attribute('step', '0.1');
+        this.fillGapInput.attribute('min', '0.1');
         this.fillGapInput.input(() => this.updateFillGap());
 
         // Add text inputs for margins (top/bottom/left/right)
@@ -347,11 +378,13 @@ class GPlotter {
     toggleEnabled() {
         let checkbox = select("#enabled");
         if (checkbox.checked() === true) {
-            if (this.connectedPort) {
+            if (this.connectedPort && this.zeroEstablished) {
                 this.enabled = true;
             } else {
                 checkbox.checked(false);
-                console.log("cannot enable plotter functions");
+                console.log(this.connectedPort
+                    ? "still establishing zero after connecting - please wait a moment and try again"
+                    : "cannot enable plotter functions");
             }
         } else {
             this.enabled = false;
@@ -507,7 +540,12 @@ class GPlotter {
         if (!this.freeDrawLastPoint) return;
         // Pen is already down from startFreeDraw()/the previous segment, so no
         // lift before or after - this keeps the whole stroke one continuous line.
-        this.line(this.freeDrawLastPoint.x, this.freeDrawLastPoint.y, x, y, 0, false, false);
+        // isFreeDraw=true routes boundary-crossing segments through
+        // lineToGCode()'s dedicated free-draw branch (see its re-entry handling)
+        // instead of the generic clipped-line branch, which always lifts at the
+        // end and would cut a free-draw stroke short every time it re-enters the
+        // drawable area after going out of bounds.
+        this.line(this.freeDrawLastPoint.x, this.freeDrawLastPoint.y, x, y, 0, false, false, true);
         this.freeDrawLastPoint = { x, y };
     }
 
@@ -622,13 +660,6 @@ class GPlotter {
             this.connectionStatusLabel.html('Connected to plotter');
             this.connectButton.html('Disconnect');
 
-            // Plotting is enabled automatically on a successful connection - the
-            // user can still disable it manually to test something without
-            // disconnecting; disconnecting always disables it again (see
-            // disconnectFromPort/handlePortDisconnected).
-            this.enabled = true;
-            this.enabledCheckbox.checked(true);
-
             this.startSerialReadLoop();
 
             // Many Arduino/AVR-based Grbl boards reset when the serial port is
@@ -639,8 +670,38 @@ class GPlotter {
             // actually takes effect. This also means: position the pen at the
             // desired origin before connecting, since every connection (including
             // after a page refresh) resets zero to wherever it's currently sitting.
+            //
+            // Plotting is gated on this.zeroEstablished (see its declaration in the
+            // constructor) until this fires: queueGCode() refuses to queue anything
+            // until this becomes true, regardless of this.enabled - so a sketch that
+            // starts drawing automatically (e.g. an already-running setInterval), or
+            // a user manually re-checking "Plotting Enabled" during this wait via
+            // toggleEnabled(), cannot queue - and Grbl cannot start executing - any
+            // shape G-code before zero is actually established. That matters because
+            // Grbl's "ok" only means a line was accepted into its planner buffer, not
+            // that the machine has physically finished moving - so even queueing
+            // shape G-code strictly *before* this raw write could leave the tool
+            // still mid-motion when this fires, redefining zero wherever it
+            // physically happened to be instead of the intended origin. Gating
+            // queueGCode() itself on a dedicated flag closes that window by
+            // construction, rather than relying on `enabled` alone, which other code
+            // paths (like toggleEnabled()) can also set independently.
             setTimeout(() => {
                 this.writeToSerial('G92 X0Y0Z0\n');
+                this.zeroEstablished = true;
+
+                // Plotting only auto-enables here if the constructor's `enabled`
+                // argument asked for it (this.autoEnableOnConnect) AND this is the
+                // session's first connect (!this.hasDisconnectedOnce). Once the
+                // user has disconnected even once, every subsequent reconnect
+                // requires an explicit, manual checkbox check from then on,
+                // regardless of autoEnableOnConnect - toggleEnabled() already
+                // requires zeroEstablished before allowing that, so it's still
+                // safe to enable manually at any point after this.
+                if (this.autoEnableOnConnect && !this.hasDisconnectedOnce) {
+                    this.enabled = true;
+                    this.enabledCheckbox.checked(true);
+                }
             }, 2000);
         } catch (error) {
             console.error('Failed to connect:', error);
@@ -684,9 +745,17 @@ class GPlotter {
         if (!this.connectedPort) return;
 
         try {
-            // Lift the pen and home before closing, same as the old server's
-            // socket-disconnect handler did.
-            this.writeToSerial('G01 Z0\nG28\n');
+            // Return the pen to work-coordinate (0,0) before closing - not a G28 home
+            // (see prior comment/fix: G28 targets Grbl's stored machine-coordinate
+            // reference, which has nothing to do with the G92 work-zero this app
+            // relies on). Leaving the carriage sitting wherever the last shape
+            // finished meant the next connect's boot-recovery G92 re-zeroed there
+            // instead of the intended origin. Moving back to (0,0) here means the
+            // carriage is already at the established zero when the port closes, so
+            // the next connect's G92 just reconfirms the same zero. Same raw,
+            // immediate-write pattern as returnToZeroOnUnload() - there's no time to
+            // wait on the ack-gated queue while actively disconnecting.
+            this.writeToSerial(`G00 Z0 F${this.feedRate}\nG00 X0 Y0 F${this.feedRate}\n`);
         } catch (error) {
             console.error('Error sending disconnect gcode:', error);
         }
@@ -722,6 +791,16 @@ class GPlotter {
         this.serialWritableClosed = null;
         this.connectedPort = null;
         this.enabled = false;
+        this.zeroEstablished = false; // next connect must re-establish zero before queueGCode() will run again
+        this.hasDisconnectedOnce = true; // next connect must not auto-enable, even if autoEnableOnConnect is true
+        // Clear any lines left over from a shape that was mid-flight when this
+        // disconnect happened. onMessage()'s dequeue-and-send logic has no
+        // enabled/zeroEstablished gate of its own (it only checks queue.length) -
+        // so stale, un-sent lines left here would get replayed the moment any
+        // "ok"-containing message arrives after reconnecting (e.g. the ack for
+        // the next connect's boot-recovery G92), driving the pen through old,
+        // no-longer-relevant absolute coordinates from before the disconnect.
+        this.queue = [];
         this.enabledCheckbox.checked(false); // keep the checkbox in sync with this.enabled
         this.connectionStatusLabel.html('Not connected to plotter');
         this.connectButton.html('Connect');
@@ -737,6 +816,16 @@ class GPlotter {
         this.serialWritableClosed = null;
         this.connectedPort = null;
         this.enabled = false;
+        this.zeroEstablished = false; // next connect must re-establish zero before queueGCode() will run again
+        this.hasDisconnectedOnce = true; // next connect must not auto-enable, even if autoEnableOnConnect is true
+        // Clear any lines left over from a shape that was mid-flight when this
+        // disconnect happened. onMessage()'s dequeue-and-send logic has no
+        // enabled/zeroEstablished gate of its own (it only checks queue.length) -
+        // so stale, un-sent lines left here would get replayed the moment any
+        // "ok"-containing message arrives after reconnecting (e.g. the ack for
+        // the next connect's boot-recovery G92), driving the pen through old,
+        // no-longer-relevant absolute coordinates from before the disconnect.
+        this.queue = [];
         this.enabledCheckbox.checked(false); // keep the checkbox in sync with this.enabled
         this.connectionStatusLabel.html('Not connected to plotter');
         this.connectButton.html('Connect');
@@ -772,7 +861,7 @@ class GPlotter {
 
     updateFillGap() {
         const newFillGap = parseFloat(this.fillGapInput.value());
-        if (!isNaN(newFillGap) && newFillGap > 0) {
+        if (!isNaN(newFillGap) && newFillGap >= 0.1) {
             this.fillGap = newFillGap;
             console.log("Updated Fill Gap:", this.fillGap);
         } else {
@@ -992,8 +1081,17 @@ class GPlotter {
 
     display() {
         noFill();
+        // Shapes drawn while `enabled` was false (see the `plotted` flag recorded
+        // by each shape method, e.g. circle()/ellipse()/etc.) are "test" shapes -
+        // never actually sent to the plotter - and are drawn grey (stroke(180)) to
+        // tell them apart from shapes that were actually plotted. Plotted shapes
+        // deliberately don't touch stroke() at all here, so they inherit whatever
+        // color the sketch's own draw() set (normally black via stroke(0)) rather
+        // than this class hardcoding a color choice.
         this.drawnShapes.forEach((shape) => {
             if (shape.type === 'circle') {
+                push();
+                if (!shape.plotted) stroke(180);
                 ellipse(shape.x, shape.y, shape.diameter, shape.diameter);
                 if (shape.fill) {
                     let radius = shape.diameter / 2;
@@ -1007,8 +1105,10 @@ class GPlotter {
                         }
                     }
                 }
+                pop();
             } else if (shape.type === 'rectangle') {
                 push();
+                if (!shape.plotted) stroke(180);
 
                 // Translate to the center of the rectangle
                 translate(shape.x, shape.y);
@@ -1036,6 +1136,7 @@ class GPlotter {
                 pop(); // Restore the previous drawing state
             } else if (shape.type === 'arc') {
                 push(); // Save the current drawing state
+                if (!shape.plotted) stroke(180);
 
                 // Translate to the center of the arc
                 translate(shape.x, shape.y);
@@ -1050,6 +1151,7 @@ class GPlotter {
                 pop(); // Restore the previous drawing state
             } else if (shape.type === 'line') {
                 push(); // Save the current drawing state
+                if (!shape.plotted) stroke(180);
 
                 // Calculate the center of the line
                 let centerX = (shape.x1 + shape.x2) / 2;
@@ -1066,6 +1168,8 @@ class GPlotter {
 
                 pop(); // Restore the previous drawing state
             } else if (shape.type === 'customShape') {
+                push();
+                if (!shape.plotted) stroke(180);
                 beginShape();
                 shape.vertices.forEach((v, index) => {
                     if (v.isCurve) {
@@ -1151,8 +1255,10 @@ class GPlotter {
                         }
                     }
                 }
+                pop();
             } else if (shape.type === 'ellipse') {
                 push(); // Save the current drawing state
+                if (!shape.plotted) stroke(180);
 
                 // Translate to the center of the ellipse
                 translate(shape.x, shape.y);
@@ -1181,8 +1287,10 @@ class GPlotter {
 
                 pop(); // Restore the previous drawing state
             } else if (shape.type === 'point') {
-                stroke(0);
+                push();
+                if (!shape.plotted) stroke(180);
                 point(shape.x, shape.y);
+                pop();
             }
         });
 
@@ -1239,7 +1347,8 @@ class GPlotter {
             y: y,
             diameter: d,
             fill: fill,
-            fillGap: this.fillGap
+            fillGap: this.fillGap,
+            plotted: this.enabled
         });
         let mmX = this.mapX(x);
         let mmY = this.mapY(y);
@@ -1386,7 +1495,8 @@ class GPlotter {
             y1: y1,
             x2: x2,
             y2: y2,
-            angle: angle
+            angle: angle,
+            plotted: this.enabled
         });
 
         // Convert pixels to millimeters
@@ -1434,8 +1544,39 @@ class GPlotter {
             gcode.push(`G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${this.feedRate} ; Draw line to endpoint`);
             gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
         } else {
-            //ie this is a free draw line segment
-            gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
+            // Free-draw segment that isn't fully in bounds - unlike the generic
+            // clipped-line branch above, this must distinguish exiting from
+            // re-entering rather than always lifting at the end, since a free-draw
+            // stroke needs to resume (pen back down) once it re-enters the
+            // drawable area, not stay lifted until endFreeDraw().
+            const startDrawable = this.canDraw(x1, y1);
+            const endDrawable = this.canDraw(x2, y2);
+            if (!startDrawable && endDrawable) {
+                // Re-entering mid-segment: rapid move (pen still up) to the
+                // boundary crossing point, then lower and resume the stroke.
+                let pointArray = this.interpolateLine(x1, y1, x2, y2);
+                let crossX = pointArray[0];
+                let crossY = pointArray[1];
+                if (crossX !== undefined) {
+                    gcode.push(`G00 X${crossX.toFixed(3)} Y${crossY.toFixed(3)} F${this.feedRate} ; Rapid move to re-entry point`);
+                    gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool - back in bounds`);
+                    gcode.push(`G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${this.feedRate} ; Resume free-draw line`);
+                }
+            } else if (startDrawable && !endDrawable) {
+                // Exiting mid-segment: draw up to the boundary crossing point,
+                // then lift - matches the existing "pen lifts when going out of
+                // bounds" behavior.
+                let pointArray = this.interpolateLine(x1, y1, x2, y2);
+                let crossX = pointArray[2];
+                let crossY = pointArray[3];
+                if (crossX !== undefined) {
+                    gcode.push(`G01 X${crossX.toFixed(3)} Y${crossY.toFixed(3)} F${this.feedRate} ; Draw to exit point`);
+                }
+                gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool - leaving bounds`);
+            } else {
+                // Neither endpoint drawable - nothing to draw; make sure the pen is up.
+                gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool (out of bounds)`);
+            }
         }
         // LIFT after drawing
         if (liftPenAfter)
@@ -1465,7 +1606,8 @@ class GPlotter {
             width: w,
             height: h,
             fill: fill,
-            angle: angle
+            angle: angle,
+            plotted: this.enabled
         });
         let mmX = this.mapX(x);
         let mmY = this.mapY(y);
@@ -1582,7 +1724,8 @@ class GPlotter {
             height: h,
             start: start,
             stop: stop,
-            angle: angle
+            angle: angle,
+            plotted: this.enabled
         });
 
         // Apply x mirroring based on the plotter origin
@@ -1676,6 +1819,7 @@ class GPlotter {
         shape.isClosed = (close === CLOSE); // Set whether the shape should be closed based on `CLOSE`
         shape.fill = fill;
         shape.fillGap = this.fillGap; // Assign the current fillGap to the shape
+        shape.plotted = this.enabled;
         this.generateGCodeForCustomShape(shape.vertices, close === CLOSE, fill, shape.fillGap);
     }
 
@@ -1821,7 +1965,8 @@ class GPlotter {
             height: h,
             fill: fill,
             fillGap: this.fillGap,
-            angle: angle
+            angle: angle,
+            plotted: this.enabled
         });
         let mmX = this.mapX(x);
         let mmY = this.mapY(y);
@@ -1904,8 +2049,7 @@ class GPlotter {
     }
 
     point(x, y) {
-        this.drawnShapes.push({ type: 'point', x: x, y: y });
-        point(x, y);
+        this.drawnShapes.push({ type: 'point', x: x, y: y, plotted: this.enabled });
         let mmX = this.mapX(x);
         let mmY = this.mapY(y);
         if (this.canDraw(x, y)) this.pointToGCode(mmX, mmY);
@@ -2037,7 +2181,10 @@ class GPlotter {
     // segments and stray connecting lines, or otherwise interrupting whatever is
     // currently mid-draw.
     queueGCode(gcodeArray) {
-        if (!this.enabled) return;
+        // Checked directly (not just via this.enabled) so nothing can slip through
+        // before the boot-recovery zero has actually been sent - see zeroEstablished's
+        // declaration in the constructor and its use in connectToPort()/toggleEnabled().
+        if (!this.enabled || !this.zeroEstablished) return;
         const wasEmpty = this.queue.length === 0;
         this.queue = this.queue.concat(gcodeArray);
         if (wasEmpty) {

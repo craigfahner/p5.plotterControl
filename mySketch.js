@@ -1,12 +1,6 @@
-// Introduction:
-// This code initializes a GPlotter instance to create a canvas for drawing shapes
-// and generating G-code for a physical plotter device if connected.
-//
-// ---- SETUP INSTRUCTIONS ----
-//
 // To use the library, create an instance of the GPlotter class in setup - plotter = new GPlotter(...
 // The constructor takes the following arguments: plotter page width (in mm), plotter page height (in mm), on-screen pixel width
-// Make sure that the first two arguments – plotter page width and height – conform to the actual plotter hardware you have:
+// Make sure that the first two arguments – plotter page width and height – conform to the actual plotter hardware you have:
 //
 // A4: 210mm x 297mm
 // A3: 297mm x 420mm
@@ -14,10 +8,12 @@
 // A1: 594mm x 841mm
 // A0: 841mm x 1189mm
 //
-// Important: Don't call GPlotter shape functions from inside the draw() function.
-// The draw() loop refreshes at the frame rate of your screen – this will effectively send dozens of instructions per second to your plotter
-// causing it to draw the same thing over and over again forever. Instead, you should call the GPlotter shape functions on discrete events.
-// For example, render a shape on mousePressed, keyPressed, or by timing events using setInterval() or millis(). See the included examples for more details.
+// Important: Don't call plotter shape functions unconditionally in draw().
+// Since draw() runs every frame, an unguarded call fires dozens of times per second.
+// It's fine to call them from within draw() as long as the call is gated by discrete, one-shot logic
+// (a timer, a flag, an event check) that lets it through exactly once — not on every frame.
+// Otherwise, you may want to call plotter shape functions on discrete p5.js event functions like mousePressed, keyPressed, etc.
+// See the included examples for more details.
 //
 // Available Shapes:
 // - Circle:        plotter.circle(x, y, diameter, fill);
@@ -54,11 +50,18 @@ function setup() {
 function draw() {
   background(225);
   stroke(0);
-  // note – don't put any plotted shapes directly in draw (unless nested in discrete logic/timing events)!
+  // note – don't put any plotted shapes directly in draw (unless nested in discrete logic/timing events)!
   // Plotter functions called elsewhere will display on the canvas thanks to the display() method below:
   plotter.display();
 }
 
+function keyPressed(){
+  if(key=="j"){
+    plotter.ellipse(mouseX,mouseY,width,100);
+  } else if(key=="k"){
+    plotter.ellipse(mouseX,mouseY,width,100,true,45);
+  }
+}
 
 // these mouse events are being passed into the plotter object to enable the "Demo Mode" – feel free to put your own mouse events alongside these handlers:
 function mousePressed() {
@@ -78,17 +81,5 @@ function mouseDragged() {
 function mouseReleased() {
   if (plotter.demoMode) {
     plotter.handleDemoMouseReleased(mouseX, mouseY);
-  }
-}
-
-// Press "j" to draw a large, rotated, filled ellipse centered on the canvas -
-// sized well beyond the current 10mm margins on every side, to check whether
-// the margin-clipping system (canDraw()) correctly constrains both the outline
-// and the fill lines once rotation is applied. Check the browser console for
-// the generated G-code (logged unconditionally by ellipseToGCode(), even
-// without a plotter connected) to inspect the actual coordinates being sent.
-function keyPressed() {
-  if (key === 'j' || key === 'J') {
-    plotter.ellipse(width / 2, height / 2, 570, 480, true, 45);
   }
 }
