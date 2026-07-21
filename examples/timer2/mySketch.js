@@ -101,15 +101,12 @@ function drawSchotterShape() {
   }
 }
 
-// these mouse events are being passed into the plotter object to enable the "Demo Mode" – feel free to put your own mouse events alongside these handlers:
+// these mouse events are being passed into the plotter object to enable the "Demo Mode" – feel free to include your own mouse events alongside these handlers:
 function mousePressed() {
   if (mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
     if (plotter.demoMode) {
       plotter.handleDemoMousePressed(mouseX, mouseY);
     }
-    let randomDiameter = random(10, width / 2);
-    let randomX = Math.floor(random(width));
-    let randomY = Math.floor(random(height));
   }
 }
 
