@@ -74,6 +74,12 @@ class GPlotter {
         this.fillGapInput = createInput(this.fillGap.toString(), "number");
         this.fillGapInput.position(screenWidth + 120, 130);
         this.fillGapInput.size(80);
+        // Without an explicit step, a number input defaults to step="1", which
+        // makes the spinner arrows (and some browsers' native validation) treat
+        // sub-1 decimals as invalid. 0.1 matches the minimum fill gap enforced
+        // below in updateFillGap().
+        this.fillGapInput.attribute('step', '0.1');
+        this.fillGapInput.attribute('min', '0.1');
         this.fillGapInput.input(() => this.updateFillGap());
 
         // Add text inputs for margins (top/bottom/left/right)
@@ -382,14 +388,16 @@ class GPlotter {
         }
     }
 
+    // Pauses/resumes sending G-code. This is purely a pause/resume toggle - it
+    // never touches the zero reference. Zero is only ever (re)established by a
+    // fresh connect or by explicitly clicking "Set New Zero" - toggling
+    // plotting off and back on (including via Emergency Stop) must never
+    // silently redefine it to wherever the pen happens to be sitting.
     toggleEnabled() {
         let checkbox = select("#enabled");
         if (checkbox.checked() === true) {
             if (this.socketConnected === true && this.connectedPort) {
                 this.enabled = true;
-                const gcode = "G92 X0 Y0 Z0 ;";
-                this.queue.push(gcode);
-                this.socket.emit("gCodeOutput", gcode + "\n");
             } else {
                 checkbox.checked(false);
                 console.log("cannot enable plotter functions");
@@ -548,7 +556,12 @@ class GPlotter {
         if (!this.freeDrawLastPoint) return;
         // Pen is already down from startFreeDraw()/the previous segment, so no
         // lift before or after - this keeps the whole stroke one continuous line.
-        this.line(this.freeDrawLastPoint.x, this.freeDrawLastPoint.y, x, y, 0, false, false);
+        // isFreeDraw=true routes boundary-crossing segments through
+        // lineToGCode()'s dedicated free-draw branch (see its re-entry handling)
+        // instead of the generic clipped-line branch, which always lifts at the
+        // end and would cut a free-draw stroke short every time it re-enters the
+        // drawable area after going out of bounds.
+        this.line(this.freeDrawLastPoint.x, this.freeDrawLastPoint.y, x, y, 0, false, false, true);
         this.freeDrawLastPoint = { x, y };
     }
 
@@ -706,7 +719,7 @@ class GPlotter {
 
     updateFillGap() {
         const newFillGap = parseFloat(this.fillGapInput.value());
-        if (!isNaN(newFillGap) && newFillGap > 0) {
+        if (!isNaN(newFillGap) && newFillGap >= 0.1) {
             this.fillGap = newFillGap;
             console.log("Updated Fill Gap:", this.fillGap);
         } else {
@@ -901,8 +914,17 @@ class GPlotter {
 
     display() {
         noFill();
+        // Shapes drawn while `enabled` was false (see the `plotted` flag recorded
+        // by each shape method, e.g. circle()/ellipse()/etc.) are "test" shapes -
+        // never actually sent to the plotter - and are drawn grey (stroke(180)) to
+        // tell them apart from shapes that were actually plotted. Plotted shapes
+        // deliberately don't touch stroke() at all here, so they inherit whatever
+        // color the sketch's own draw() set (normally black via stroke(0)) rather
+        // than this class hardcoding a color choice.
         this.drawnShapes.forEach((shape) => {
             if (shape.type === 'circle') {
+                push();
+                if (!shape.plotted) stroke(180);
                 ellipse(shape.x, shape.y, shape.diameter, shape.diameter);
                 if (shape.fill) {
                     let radius = shape.diameter / 2;
@@ -916,8 +938,10 @@ class GPlotter {
                         }
                     }
                 }
+                pop();
             } else if (shape.type === 'rectangle') {
                 push();
+                if (!shape.plotted) stroke(180);
 
                 // Translate to the center of the rectangle
                 translate(shape.x, shape.y);
@@ -945,6 +969,7 @@ class GPlotter {
                 pop(); // Restore the previous drawing state
             } else if (shape.type === 'arc') {
                 push(); // Save the current drawing state
+                if (!shape.plotted) stroke(180);
 
                 // Translate to the center of the arc
                 translate(shape.x, shape.y);
@@ -959,6 +984,7 @@ class GPlotter {
                 pop(); // Restore the previous drawing state
             } else if (shape.type === 'line') {
                 push(); // Save the current drawing state
+                if (!shape.plotted) stroke(180);
 
                 // Calculate the center of the line
                 let centerX = (shape.x1 + shape.x2) / 2;
@@ -975,6 +1001,8 @@ class GPlotter {
 
                 pop(); // Restore the previous drawing state
             } else if (shape.type === 'customShape') {
+                push();
+                if (!shape.plotted) stroke(180);
                 beginShape();
                 shape.vertices.forEach((v, index) => {
                     if (v.isCurve) {
@@ -1060,8 +1088,10 @@ class GPlotter {
                         }
                     }
                 }
+                pop();
             } else if (shape.type === 'ellipse') {
                 push(); // Save the current drawing state
+                if (!shape.plotted) stroke(180);
 
                 // Translate to the center of the ellipse
                 translate(shape.x, shape.y);
@@ -1090,8 +1120,10 @@ class GPlotter {
 
                 pop(); // Restore the previous drawing state
             } else if (shape.type === 'point') {
-                stroke(0);
+                push();
+                if (!shape.plotted) stroke(180);
                 point(shape.x, shape.y);
+                pop();
             }
         });
 
@@ -1148,7 +1180,8 @@ class GPlotter {
             y: y,
             diameter: d,
             fill: fill,
-            fillGap: this.fillGap
+            fillGap: this.fillGap,
+            plotted: this.enabled
         });
         let mmX = this.mapX(x);
         let mmY = this.mapY(y);
@@ -1295,7 +1328,8 @@ class GPlotter {
             y1: y1,
             x2: x2,
             y2: y2,
-            angle: angle
+            angle: angle,
+            plotted: this.enabled
         });
 
         // Convert pixels to millimeters
@@ -1343,8 +1377,39 @@ class GPlotter {
             gcode.push(`G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${this.feedRate} ; Draw line to endpoint`);
             gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
         } else {
-            //ie this is a free draw line segment
-            gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
+            // Free-draw segment that isn't fully in bounds - unlike the generic
+            // clipped-line branch above, this must distinguish exiting from
+            // re-entering rather than always lifting at the end, since a free-draw
+            // stroke needs to resume (pen back down) once it re-enters the
+            // drawable area, not stay lifted until endFreeDraw().
+            const startDrawable = this.canDraw(x1, y1);
+            const endDrawable = this.canDraw(x2, y2);
+            if (!startDrawable && endDrawable) {
+                // Re-entering mid-segment: rapid move (pen still up) to the
+                // boundary crossing point, then lower and resume the stroke.
+                let pointArray = this.interpolateLine(x1, y1, x2, y2);
+                let crossX = pointArray[0];
+                let crossY = pointArray[1];
+                if (crossX !== undefined) {
+                    gcode.push(`G00 X${crossX.toFixed(3)} Y${crossY.toFixed(3)} F${this.feedRate} ; Rapid move to re-entry point`);
+                    gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool - back in bounds`);
+                    gcode.push(`G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${this.feedRate} ; Resume free-draw line`);
+                }
+            } else if (startDrawable && !endDrawable) {
+                // Exiting mid-segment: draw up to the boundary crossing point,
+                // then lift - matches the existing "pen lifts when going out of
+                // bounds" behavior.
+                let pointArray = this.interpolateLine(x1, y1, x2, y2);
+                let crossX = pointArray[2];
+                let crossY = pointArray[3];
+                if (crossX !== undefined) {
+                    gcode.push(`G01 X${crossX.toFixed(3)} Y${crossY.toFixed(3)} F${this.feedRate} ; Draw to exit point`);
+                }
+                gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool - leaving bounds`);
+            } else {
+                // Neither endpoint drawable - nothing to draw; make sure the pen is up.
+                gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool (out of bounds)`);
+            }
         }
         // LIFT after drawing
         if (liftPenAfter)
@@ -1374,7 +1439,8 @@ class GPlotter {
             width: w,
             height: h,
             fill: fill,
-            angle: angle
+            angle: angle,
+            plotted: this.enabled
         });
         let mmX = this.mapX(x);
         let mmY = this.mapY(y);
@@ -1491,7 +1557,8 @@ class GPlotter {
             height: h,
             start: start,
             stop: stop,
-            angle: angle
+            angle: angle,
+            plotted: this.enabled
         });
 
         // Apply x mirroring based on the plotter origin
@@ -1585,6 +1652,7 @@ class GPlotter {
         shape.isClosed = (close === CLOSE); // Set whether the shape should be closed based on `CLOSE`
         shape.fill = fill;
         shape.fillGap = this.fillGap; // Assign the current fillGap to the shape
+        shape.plotted = this.enabled;
         this.generateGCodeForCustomShape(shape.vertices, close === CLOSE, fill, shape.fillGap);
     }
 
@@ -1730,7 +1798,8 @@ class GPlotter {
             height: h,
             fill: fill,
             fillGap: this.fillGap,
-            angle: angle
+            angle: angle,
+            plotted: this.enabled
         });
         let mmX = this.mapX(x);
         let mmY = this.mapY(y);
@@ -1774,7 +1843,7 @@ class GPlotter {
 
         gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
 
-        // Generate fill lines with rotation
+        // Generate fill lines with rotation, clipping each line against the margins
         if (fill) {
             for (let yy = y - r_h; yy <= y + r_h; yy += this.fillGap) {
                 let xOffset = r_w * Math.sqrt(1 - Math.pow((yy - y) / r_h, 2));
@@ -1786,9 +1855,22 @@ class GPlotter {
                     let rotatedStartFill = this.applyRotation(x1, yy, x, y, angle);
                     let rotatedEndFill = this.applyRotation(x2, yy, x, y, angle);
 
-                    gcode.push(`G00 X${rotatedStartFill.x.toFixed(3)} Y${rotatedStartFill.y.toFixed(3)} ; Move to fill start`);
+                    let fx1 = rotatedStartFill.x, fy1 = rotatedStartFill.y;
+                    let fx2 = rotatedEndFill.x, fy2 = rotatedEndFill.y;
+                    if (!this.canDraw(fx1, fy1) || !this.canDraw(fx2, fy2)) {
+                        let pointArray = this.interpolateLine(fx1, fy1, fx2, fy2);
+                        fx1 = pointArray[0];
+                        fy1 = pointArray[1];
+                        fx2 = pointArray[2];
+                        fy2 = pointArray[3];
+                        if (fx1 === undefined || fy1 === undefined || fx2 === undefined || fy2 === undefined) {
+                            continue; // entire fill line is outside the drawable area
+                        }
+                    }
+
+                    gcode.push(`G00 X${fx1.toFixed(3)} Y${fy1.toFixed(3)} ; Move to fill start`);
                     gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for filling`);
-                    gcode.push(`G01 X${rotatedEndFill.x.toFixed(3)} Y${rotatedEndFill.y.toFixed(3)} F${this.feedRate} ; Fill line`);
+                    gcode.push(`G01 X${fx2.toFixed(3)} Y${fy2.toFixed(3)} F${this.feedRate} ; Fill line`);
                     gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after fill line`);
                 }
             }
@@ -1800,8 +1882,7 @@ class GPlotter {
     }
 
     point(x, y) {
-        this.drawnShapes.push({ type: 'point', x: x, y: y });
-        point(x, y);
+        this.drawnShapes.push({ type: 'point', x: x, y: y, plotted: this.enabled });
         let mmX = this.mapX(x);
         let mmY = this.mapY(y);
         if (this.canDraw(x, y)) this.pointToGCode(mmX, mmY);
