@@ -14,7 +14,7 @@ let lastProcessedString = ""; // guards against reprocessing an unchanged result
 
 let speechBubbles = []; // { x, y, w, h } bounding boxes of bubbles already placed
 
-const TEXT_SCALE = 0.1;
+const TEXT_SCALE = 0.3;
 
 // Must match the `dy` constant in gplotter.js's drawPath(): drawString()'s y
 // parameter is the output position of the raw glyph row dy=22, i.e.
