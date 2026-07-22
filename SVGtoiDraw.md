@@ -53,4 +53,4 @@ To plot, navigate to the "Plot" tab in the iDraw Control extension, and click "A
 
 ![Plotter extension plot page](assets/plot.png)
 
-You also may choose to change some of the plotter settings, such as the plotting speed
+You also may choose to change some of the plotter settings, such as the plotting speed, from this extension.

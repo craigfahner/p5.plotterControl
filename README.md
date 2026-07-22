@@ -7,7 +7,7 @@ permalink: /readme/
 
 ![Hello world example](assets/helloPlot.gif)
 
-This is a p5.js library that allows for real-time control of GRBL-controllable pen plotters like those manufactured by iDraw / uunatek. With this library, you can control the pen plotter using p5.js-style shape functions. It is ideal for applications where you want to achieve direct, live control of the pen plotter, instead of plotting a finished file all at once as you might with other p5 libraries like [p5.plotSVG](https://github.com/golanlevin/p5.plotSvg). Please see [these instructions](https://craigfahner.github.io/p5.plotterControl/readme/) for details on the workflow for exporting vector files for plotting from Inkscape to iDraw plotters.
+This is a p5.js library that allows for real-time control of GRBL-controllable pen plotters like those manufactured by iDraw / uunatek. With this library, you can control the pen plotter using p5.js-style shape functions. It is ideal for applications where you want to achieve direct, live control of the pen plotter, instead of plotting a finished file all at once as you might with other p5 libraries like [p5.plotSVG](https://github.com/golanlevin/p5.plotSvg). Please see [these instructions](https://craigfahner.github.io/p5.plotterControl/svg/) for details on the workflow for exporting vector files for plotting from Inkscape to iDraw plotters.
 
 This library uses the [WebSerial](https://developer.chrome.com/docs/capabilities/serial) implementation to control the pen plotter directly from the browser. Currently, WebSerial only works in Chrome/Chromium based browsers. A node.js relay based version is available in a separate branch, which may be useful if you need to run this on a non-Chromium browser.
 
