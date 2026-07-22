@@ -14,6 +14,8 @@ The library consists of three components:
 - The p5.js sketch (mySketch.js), which can be edited to generate graphics to be rendered by the plotter
 - index.html, which embeds gplotter.js and mySketch.js – open this file in the browser (and not, for instance, the Visual Studio code preview pane) to run your project
 
+You can run the demo mode and examples directly from this repo. Clone the repo or download the project files to experiment locally.
+
 ## Plotter Configuration
 
 Before connecting, position the pen carriage in the "top right" corner of the page – the same corner used by the iDraw Inkscape plugin. Connecting to the plotter (see the Connect button, below) automatically sets this position as the machine's zero point or "home" position.
