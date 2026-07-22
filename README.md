@@ -1,3 +1,6 @@
+---
+permalink: /readme/
+---
 
 # p5-plotter-control
 ## a real-time pen plotter control library for p5.js
