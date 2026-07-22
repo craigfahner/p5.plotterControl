@@ -1,3 +1,7 @@
+---
+permalink: /svg/
+---
+
 # Instructions for exporting p5.js sketches to SVG for Inkscape Output
 
 While this library is meant for *live* control of pen plotters from p5.js, you may want to export your p5.js sketch as a static SVG file, so it can be plotted using the iDraw Control extension for Inkscape.
