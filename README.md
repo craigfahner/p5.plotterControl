@@ -14,7 +14,7 @@ The library consists of three components:
 - The p5.js sketch (mySketch.js), which can be edited to generate graphics to be rendered by the plotter
 - index.html, which embeds gplotter.js and mySketch.js – open this file in the browser (and not, for instance, the Visual Studio code preview pane) to run your project
 
-You can run the demo mode and examples directly from this repo. Clone the repo or download the project files to experiment locally.
+You can run the demo mode and [examples](https://github.com/craigfahner/p5.plotterControl/tree/main/examples) directly from this repo. Clone the repo or download the project files to experiment locally.
 
 ## Plotter Configuration
 
@@ -56,7 +56,7 @@ function setup() {
 
 You can control the pen plotter using the GPlotter shape functions listed below. Standard p5.js shape functions – such as circle, rectangle, line, arc, etc – have equivalents within the gplotter class, which simultaneously draw the forms to the on-screen canvas, while generating and sending equivalent messages to the plotter.
 
-**Don't call plotter shape functions unconditionally inside `draw()`.** Since `draw()` runs every frame, an unguarded call fires dozens of times per second. It's fine to call them from within `draw()` as long as the call is gated by discrete, one-shot logic (a timer, a flag, an event check) that lets it through exactly once, not on every frame. Event handler functions like `mousePressed()` and `keyPressed()` are discrete by nature — they only fire once per event, not continuously — which makes them natural places to call shape functions directly, no extra guard needed. Please see the included examples for demonstrations of these kinds of discrete events.
+**Don't call plotter shape functions unconditionally inside `draw()`.** Since `draw()` runs every frame, an unguarded call fires dozens of times per second. It's fine to call them from within `draw()` as long as the call is gated by discrete, one-shot logic (a timer, a flag, an event check) that lets it through exactly once, not on every frame. Event handler functions like `mousePressed()` and `keyPressed()` are discrete by nature — they only fire once per event, not continuously — which makes them natural places to call shape functions directly, no extra guard needed. Please see the included [examples](https://github.com/craigfahner/p5.plotterControl/tree/main/examples) for demonstrations of these kinds of discrete events.
 
 ---
 

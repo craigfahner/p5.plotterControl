@@ -22,7 +22,7 @@ Renders Georg Nees' 1968 plotter-based drawing Schotter in real time. Uses a mil
   }
 ```
 
-[Link to code](../assets/timer2/mySketch.js) | Launch sketch in browser
+[Link to code](../assets/timer2/mySketch.js) | [Launch sketch in browser](https://craigfahner.github.io/p5.plotterControl/examples/timer2/)
 
 ## Example 3: live control using webcam via ml5.js handpose
 
@@ -30,7 +30,7 @@ Renders Georg Nees' 1968 plotter-based drawing Schotter in real time. Uses a mil
 
 Uses the [ml5.js](https://ml5js.org/) implementation of [HandPose](https://docs.ml5js.org/#/reference/handpose) to detect the position of a person's hand on a webcam. By tracking the distance between the tips of the index finger and thumb, a pinch gesture is detected. When the pinch is detected, the pen is lowered and traces the position of the pinched fingers. When the pinch is released, the pen is raised.
 
-[Link to code](/examples/pinchdraw/mySketch.js) | Launch sketch in browser
+[Link to code](/examples/pinchdraw/mySketch.js) | [Launch sketch in browser](https://craigfahner.github.io/p5.plotterControl/examples/pinchdraw/)
 
 ## Example 4: audio-reactive drawing
 
@@ -38,7 +38,7 @@ Uses the [ml5.js](https://ml5js.org/) implementation of [HandPose](https://docs.
 
 Draws a graph of the amplitude of audio input in your computer's built in microphone.
 
-[Link to code](/examples/soundactivated/mySketch.js) | Launch sketch in browser
+[Link to code](/examples/soundactivated/mySketch.js) | [Launch sketch in browser](https://craigfahner.github.io/p5.plotterControl/examples/soundactivated/)
 
 ## Example 5: speech recognition
 
@@ -46,4 +46,4 @@ Draws a graph of the amplitude of audio input in your computer's built in microp
 
 Using p5.speech, detects fragments of speech via the microphone, and plots them as text inside speech bubbles.
 
-[Link to code](/examples/speechbubble/mySketch.js) | Launch sketch in browser
+[Link to code](/examples/speechbubble/mySketch.js) | [Launch sketch in browser](https://craigfahner.github.io/p5.plotterControl/examples/speechbubble/)
