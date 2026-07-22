@@ -393,7 +393,7 @@ For now, this project only works with GRBL-based plotters like those manufacture
 
 ### Other p5.js pen plotter libraries
 
-- [p5.plotSvg](https://github.com/golanlevin/p5.plotSvg#acknowledgments) by [@golan](https://github.com/golan) - export plotter-ready SVG files from p5.js sketches
+- [p5.plotSvg](https://github.com/golanlevin/p5.plotSvg) by [@golan](https://github.com/golan) - export plotter-ready SVG files from p5.js sketches
 - [p5.axidraw](https://github.com/jmpinit/p5.axidraw) by [@jmpinit](https://github.com/jmpinit) - live control of Axidraw plotters from p5.js
 
 ### Acknowledgements
