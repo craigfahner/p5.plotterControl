@@ -14,7 +14,7 @@ The library consists of three components:
 - The p5.js sketch (mySketch.js), which can be edited to generate graphics to be rendered by the plotter
 - index.html, which embeds gplotter.js and mySketch.js – open this file in the browser (and not, for instance, the Visual Studio code preview pane) to run your project
 
-You can run the demo mode and [examples](https://github.com/craigfahner/p5.plotterControl/tree/main/examples) directly from this repo. Clone the repo or download the project files to experiment locally.
+You can run the [demo mode](https://craigfahner.github.io/p5.plotterControl/) and [examples](https://craigfahner.github.io/p5.plotterControl/examples/) directly from this repo. Clone the repo or [download the project files](https://github.com/craigfahner/p5.plotterControl/archive/refs/heads/main.zip) to experiment locally.
 
 ## Plotter Configuration
 
