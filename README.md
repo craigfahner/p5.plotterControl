@@ -2,6 +2,8 @@
 # p5-plotter-control
 ## a real-time pen plotter control library for p5.js
 
+![Hello world example](assets/helloPlot.gif)
+
 This is a p5.js library that allows for real-time control of GRBL-controllable pen plotters like those manufactured by iDraw / uunatek. With this library, you can control the pen plotter using p5.js-style shape functions. It is ideal for applications where you want to achieve direct, live control of the pen plotter, instead of plotting a finished file all at once as you might with other p5 libraries like [p5.plotSVG](https://github.com/golanlevin/p5.plotSvg). Please see the separate SVGtoiDraw.md document for details on the workflow for exporting vector files for plotting from Inkscape to iDraw plotters.
 
 This library uses the [WebSerial](https://developer.chrome.com/docs/capabilities/serial) implementation to control the pen plotter directly from the browser. Currently, WebSerial only works in Chrome/Chromium based browsers. A node.js relay based version is available in a separate branch, which may be useful if you need to run this on a non-Chromium browser.
@@ -14,7 +16,7 @@ The library consists of three components:
 
 ## Plotter Configuration
 
-Before connecting, position the pen carriage in the "top right" corner of the page – the same corner used by the iDraw Inkscape plugin. Connecting to the plotter (see the Connect button, below) automatically sets this position as the machine's zero point – there's no separate zeroing step.
+Before connecting, position the pen carriage in the "top right" corner of the page – the same corner used by the iDraw Inkscape plugin. Connecting to the plotter (see the Connect button, below) automatically sets this position as the machine's zero point or "home" position.
 
 ![Zero position](assets/zero.png)
 
@@ -376,3 +378,19 @@ Draws a continuous line segment from the last free-draw point to `(x, y)`, keepi
 
 ### `endFreeDraw()`
 Ends the current free-draw stroke and lifts the pen.
+
+---
+## Notes
+
+### Issues and future development
+
+For now, this project only works with GRBL-based plotters like those manufactured by iDraw/uunatek. EiBotBoard-based plotters like the Axidraw use a different control protocol. It may be possible in the future to implement Axidraw control using the [ebb-control](https://github.com/jmpinit/ebb-control) js wrapper by [@jmpinit](https://github.com/jmpinit).
+
+### Other p5.js pen plotter libraries
+
+- [p5.plotSvg](https://github.com/golanlevin/p5.plotSvg#acknowledgments) by [@golan](https://github.com/golan) - export plotter-ready SVG files from p5.js sketches
+- [p5.axidraw](https://github.com/jmpinit/p5.axidraw) by [@jmpinit](https://github.com/jmpinit) - live control of Axidraw plotters from p5.js
+
+### Acknowledgements
+
+Thank you to [@NooraLiu](https://github.com/NooraLiu) and [@beboop-code](https://github.com/beboop-code) for your valuable contributions to this project. Thank you to [@IDMNYU](https://github.com/IDMNYU) for providing space, time and support to develop this work. This project was funded through the [Data Fluencies](https://digitaldemocracies.org/data-fluencies/df-methods-and-tools/) project.

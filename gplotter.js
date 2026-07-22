@@ -1539,10 +1539,16 @@ class GPlotter {
             y1 = pointArray[1];
             x2 = pointArray[2];
             y2 = pointArray[3];
-            gcode.push(`G00 X${x1.toFixed(3)} Y${y1.toFixed(3)} F${this.feedRate} ; Rapid move to start`);
-            gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for cutting`);
-            gcode.push(`G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${this.feedRate} ; Draw line to endpoint`);
-            gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
+            // If the whole line lies outside the drawable area, interpolateLine()
+            // never finds a boundary crossing and returns undefined for all four
+            // values - nothing to draw in that case (matches the free-draw branch
+            // below, which already guards against this the same way).
+            if (x1 !== undefined && y1 !== undefined && x2 !== undefined && y2 !== undefined) {
+                gcode.push(`G00 X${x1.toFixed(3)} Y${y1.toFixed(3)} F${this.feedRate} ; Rapid move to start`);
+                gcode.push(`G01 Z${this.cuttingDepth} F${this.feedRate} ; Lower tool for cutting`);
+                gcode.push(`G01 X${x2.toFixed(3)} Y${y2.toFixed(3)} F${this.feedRate} ; Draw line to endpoint`);
+                gcode.push(`G00 Z0 F${this.feedRate} ; Lift tool after cutting`);
+            }
         } else {
             // Free-draw segment that isn't fully in bounds - unlike the generic
             // clipped-line branch above, this must distinguish exiting from
