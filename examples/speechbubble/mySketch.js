@@ -37,7 +37,7 @@ const MAX_PLACEMENT_ATTEMPTS = 100;
 const MIN_WORDS_PER_BREAK = 12;  // phrases shorter than this stay on one line
 
 function setup() {
-  plotter = new GPlotter(594, 841, 500, false);
+  plotter = new GPlotter(210, 297, 500, false);
   createCanvas(plotter.screenWidth, plotter.canvasHeight);
   background(225);
 
