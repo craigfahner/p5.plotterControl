@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Draw a doodle</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 16px;
+            font-family: system-ui, sans-serif;
+            background: #fff;
+            color: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            overscroll-behavior: none;
+        }
+        #sketch canvas {
+            display: block;
+            touch-action: none; /* stop the page scrolling while drawing */
+            border: 1px solid #000;
+            background: #fff;
+        }
+        .buttons { display: flex; gap: 8px; }
+        button {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.55rem;
+            padding: 6px 12px;
+            border: 1px solid #000;
+            border-radius: 4px;
+            background: #fff;
+            color: #000;
+            -webkit-tap-highlight-color: transparent;
+        }
+        button:active:not(:disabled) { background: #000; color: #fff; }
+        button:disabled { opacity: 0.5; }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.0/lib/p5.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="draw.js" defer></script>
+    </head>
+<body ontouchstart=""> <!-- lets :active fire on iOS taps -->
+    <div id="sketch"></div>
+    <div class="buttons">
+        <button id="clear">Clear</button>
+        <button id="submit">Submit</button>
+    </div>
+</body>
+</html>
