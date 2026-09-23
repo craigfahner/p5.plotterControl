@@ -1,8 +1,8 @@
 {
-  "name": "p5-plotter-doodle-demo",
+  "name": "p5-plotter-vacant-lots-demo",
   "version": "0.1.0",
   "private": true,
-  "description": "Phones submit doodles over socket.io; a GPlotter browser tab plots them in a grid.",
+  "description": "Phones submit prompts over socket.io; a GPlotter browser tab plots them as speech bubbles pointing at vacant lots on a map of NYC.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

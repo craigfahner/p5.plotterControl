@@ -3,7 +3,7 @@
     <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>Draw a doodle</title>
+    <title>Vacant space</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500&display=swap" rel="stylesheet">
@@ -11,22 +11,41 @@
         body {
             margin: 0;
             padding: 16px;
-            font-family: system-ui, sans-serif;
+            font-family: 'Roboto Mono', monospace;
             background: #fff;
             color: #000;
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 12px;
-            overscroll-behavior: none;
         }
-        #sketch canvas {
-            display: block;
-            touch-action: none; /* stop the page scrolling while drawing */
+        h1 {
+            width: 100%;
+            max-width: 480px;
+            margin: 0;
+            font-size: 0.9rem;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+        textarea {
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 480px;
+            padding: 8px;
             border: 1px solid #000;
-            background: #fff;
+            border-radius: 0;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 16px; /* 16px or more stops iPhones zooming in when the box is tapped */
+            resize: none;
         }
-        .buttons { display: flex; gap: 8px; }
+        textarea:focus { outline: 1px solid #000; } /* replaces the browser's colored focus ring */
+        textarea:disabled { color: #000; background: #fff; opacity: 0.5; }
+        #count {
+            width: 100%;
+            max-width: 480px;
+            font-size: 0.55rem;
+            text-align: right;
+        }
         button {
             font-family: 'Roboto Mono', monospace;
             font-size: 0.55rem;
@@ -43,13 +62,12 @@
 
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.0/lib/p5.js"></script>
     <script src="/socket.io/socket.io.js"></script>
-    <script src="draw.js" defer></script>
+    <script src="prompt.js" defer></script>
     </head>
 <body ontouchstart=""> <!-- lets :active fire on iOS taps -->
-    <div id="sketch"></div>
-    <div class="buttons">
-        <button id="clear">Clear</button>
-        <button id="submit">Submit</button>
-    </div>
+    <h1>what would you like to see happen with vacant space in the city?</h1>
+    <textarea id="prompt" rows="4" maxlength="140"></textarea>
+    <div id="count">0 / 140</div>
+    <button id="submit">Submit</button>
 </body>
 </html>

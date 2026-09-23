@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>wild lots</title>
+    <script src="socket.io.js"></script>
+    <script src="dxd_lookup.js" defer></script>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="flex-container">
+      <div id="searchfield" class="flexitem">
+        <!-- <p class="centertext tiltytext">enter a nyc address</p> -->
+        <input id="address" type="text" placeholder="enter a nyc address" virtualkeyboardpolicy="manual"/>
+      </div>
+
+        <div id="searchbutton">
+          <span id="btn" class="tiltytext">Find Nearest Vacant Lot</span>
+        </div>
+
+      <div id="centercircle" class="flexitem centertext">
+
+        <div id="status" class="flexitem centertext">
+            <span id="statustext">styling the status text</span>
+          </div>
+        <div id="result" style="display: none">
+          <div class="resultheading resultline">Nearest Vacant Lot:</div>
+          <div id="resultaddress" class="resultline"></div>
+          <div class="resultheading resultline">
+            Distance from entered address:
+          </div>
+          <div id="resultdistance" class="resultline"></div><br \>
+          <div id="seedDropStatus"  style = "text-align: left" resultline"></div>
+        </div>
+      </div>
+      <div id="back" class="flexitem centertext tiltytext bottomthing"><a href="index.html">back</a></div>
+    </div>
+  </body>
+</html>
