@@ -39,36 +39,17 @@
 //
 // by Craig Fahner, Nora Liu and Alissa Kushner 2023-2026
 
-let noiseX, noiseY;
-let noiseSpeed = 0.01;
-let xPos;
-let yPos;
-
 let plotter;
 
 function setup() {
   //plotter = new GPlotter(594, 841, 500); //A1 size
   plotter = new GPlotter(210, 297, 500); // creates a GPlotter object that is A4 sized (210mm x 297mm), with an on-screen width of 500px
   createCanvas(plotter.screenWidth, plotter.canvasHeight);
-  noiseX = random(1000);
-  noiseY = random(1000);
 }
 
 function draw() {
   background(225);
   stroke(0);
-
-  if (keyIsDown(74)) {
-    console.log("keydown");
-    xPos = noise(noiseX) * (width / 2) + width / 4;
-    yPos = noise(noiseY) * (height / 2) + height / 4;
-
-    plotter.freeDrawTo(xPos, yPos);
-
-
-    noiseX += noiseSpeed;
-    noiseY += noiseSpeed;
-  }
 
   // note – don't put any plotted shapes directly in draw (unless nested in discrete logic/timing events)!
   // Plotter functions called elsewhere will display on the canvas thanks to the display() method below:
@@ -76,19 +57,10 @@ function draw() {
 }
 
 function keyPressed() {
-  console.log(keyCode);
-  if (key == "j") {
-    xPos = noise(noiseX) * (width / 2) + width / 4;
-    yPos = noise(noiseY) * (height / 2) + height / 4;
-    plotter.startFreeDraw(xPos,yPos);
-  }
+  // functions here run once on key press
 }
 
-function keyReleased() {
-  if(key == "j"){
-    plotter.endFreeDraw();
-  }
-}
+
 
 // these mouse events are being passed into the plotter object to enable the "Demo Mode" – feel free to put your own mouse events alongside these handlers:
 function mousePressed() {
